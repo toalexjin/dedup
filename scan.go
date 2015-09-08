@@ -56,10 +56,6 @@ func scanFolder_i(path string, files map[string]*FileAttr,
 	defer fp.Close()
 
 	for {
-		if err := updater.Error(); err != nil {
-			return err
-		}
-
 		list, err := fp.Readdir(256)
 		if err != nil && err != io.EOF {
 			updater.Print("Could not enumerate folder %v. Error:%v", path, err)
@@ -68,6 +64,11 @@ func scanFolder_i(path string, files map[string]*FileAttr,
 		}
 
 		for i := 0; i < len(list); i++ {
+			// Check if job was cancelled or an error ever happened.
+			if err := updater.Error(); err != nil {
+				return err
+			}
+
 			// Get full path.
 			var fullPath string
 
@@ -134,6 +135,11 @@ func scanFile_i(path string, files map[string]*FileAttr,
 
 	// Read file content
 	for {
+		// Check if job was cancelled or an error ever happened.
+		if err := updater.Error(); err != nil {
+			return err
+		}
+
 		n, err := fp.Read(buffer)
 		if err != nil && err != io.EOF {
 			updater.Print("Could not read file %v. Error:%v", path, err)
