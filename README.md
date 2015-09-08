@@ -1,7 +1,7 @@
 # Introduction
 
-This project is to remove duplicated files from your system,
-e.g.removing duplicated pictures to free disk space.
+This project is to remove duplicated files from your system.
+For instance, removing duplicated pictures to free disk space.
 
 # Usage
 
