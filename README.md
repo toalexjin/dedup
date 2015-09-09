@@ -23,8 +23,8 @@ dedup [-f] [-p <policy,...>] <path>...
 
 **Remark**:
 
-- If `-p <policy,...>` is not specified, then
-  `-p new,longname,longpath` will be used as default policies.
+- If option `-p <policy,...>` is not specified, then default policy
+  `-p new,longname,longpath` will be used.
 
 # Supported Platforms
 
