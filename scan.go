@@ -172,6 +172,7 @@ func scanFile_i(path string, files map[string]*FileAttr,
 	// Create a new object.
 	newValue := &FileAttr{
 		Path:       path,
+		Name:       info.Name(),
 		ModTime:    info.ModTime().UnixNano(),
 		Size:       info.Size(),
 		StillExist: true,
