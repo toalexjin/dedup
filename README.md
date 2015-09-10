@@ -1,9 +1,9 @@
-# Introduction
+# Dedup
 
 This project is to remove duplicated files from your system.
 For instance, removing duplicated pictures to free disk space.
 
-# Usage
+## Usage
 
 ```
 dedup [-f] [-p <policy,...>] <path>...
@@ -26,13 +26,13 @@ dedup [-f] [-p <policy,...>] <path>...
 - If option `-p <policy,...>` is not specified, then default policy
   `-p new,longname,longpath` will be used.
 
-# Supported Platforms
+## Supported Platforms
 
 It's written in Go language, which is platform independent.
 That's to say, almost all platforms are supported,
 e.g. Windows, Linux, Mac,...
 
-# Build
+## Build
 
 1. Install latest **Go Compiler** (https://golang.org)
 2. Set environment variable `$GOROOT=/path/to/go` and add it to $PATH.
