@@ -2,17 +2,27 @@
 package main
 
 import (
+	"crypto/sha256"
 	"flag"
 	"fmt"
 	"os"
 )
 
+// Return value of promptDelete()
+const (
+	PROMPT_ANSWER_NO = iota
+	PROMPT_ANSWER_ABORT
+	PROMPT_ANSWER_YES_ALL
+	PROMPT_ANSWER_YES
+)
+
 func usage() {
 	fmt.Println("Remove duplicated files from your system.")
 	fmt.Println()
-	fmt.Println("Usage: dedup [-f] [-p <policy>,...] <path>...")
+	fmt.Println("Usage: dedup [-v] [-f] [-p <policy>,...] <path>...")
 	fmt.Println()
 	fmt.Println("Options and Arguments:")
+	fmt.Println("    -v:        Verbose mode.")
 	fmt.Println("    -f:        Do not prompt before removing files.")
 	fmt.Println("    -p:        Policy indicates which files to remove.")
 	fmt.Println()
@@ -30,24 +40,40 @@ func usage() {
 
 // Input paths might be duplicated and might be relative paths,
 // we need to remove duplicated and convert all to absolete paths.
-func getAbsoleteUniquePaths(paths []string) {
+func getAbsoleteUniquePaths(paths []string) []string {
 
-	// To-do:
+	// TO-DO:
+	//
+	// Convert relative paths to absolte
+	// Remove duplicated ...
 
 	return paths
 }
 
-type MappingItem struct {
-	File    *FileAttr    // File attributes.
-	Scanner *FileScanner // Belongs to which file scanner
+// Return value is PROMPT_ANSWER_???
+func promptDelete(file string) int {
+
+	// TO-DO
+
+	return PROMPT_ANSWER_YES_ALL
+}
+
+// Map SHA256 hash to file.
+//
+// map[SHA256]HashItem
+type HashItem struct {
+	File    *FileAttr   // File attributes.
+	Scanner FileScanner // Belongs to which file scanner
 }
 
 func main_i() int {
 
+	var verbose bool
 	var force bool
 	var policySpec string
 
 	// Parse command line options.
+	flag.BoolVar(&verbose, "v", false, "Verbose mode.")
 	flag.BoolVar(&force, "f", false, "Do not prompt before removing files.")
 	flag.StringVar(&policySpec, "p", "", "Policy indicates which files to remove.")
 	flag.Parse()
@@ -58,62 +84,70 @@ func main_i() int {
 		return 1
 	}
 
+	// Create a updater callback object.
+	updater := NewUpdater(verbose)
+
 	// Create file scanner for each path.
 	paths := getAbsoleteUniquePaths(flag.Args())
-	scanners := make([]*FileScanner, len(paths))
+	scanners := make([]FileScanner, len(paths))
 
-	for _, path := range paths {
-		info, err := os.Stat(path)
+	for i := 0; i < len(paths); i++ {
+		info, err := os.Stat(paths[i])
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%v (%v)", err, path)
+			updater.Log(LOG_ERROR, "%v (%v)", err, paths[i])
 			return 1
 		}
 
-		scanners[i] = NewFileScanner(path, info)
+		scanners[i] = NewFileScanner(paths[i], info)
 	}
 
 	// Scan files.
 	for _, scanner := range scanners {
-		if err := scanner.Scan(); err != nil {
+		updater.Log(LOG_INFO, "Scan %v...", scanner.GetPath())
+
+		if err := scanner.Scan(updater); err != nil {
 			return 1
 		}
+
+		updater.Log(LOG_INFO, "%v files, %v folders, %.3f MB",
+			scanner.GetTotalFiles(), scanner.GetTotalFolders(),
+			float64(scanner.GetTotalBytes())/(1024*1024))
 	}
 
-	// Create a policy object to determine which file to delete.
-	policy := NewPolicy(policySpec)
+	// Create a policy to determine which file to delete.
+	policy, err := NewPolicy(policySpec)
+	if err != nil {
+		updater.Log(LOG_ERROR, "%v", err)
+	}
 
 	// Result variables
-	var totalFiles int64 = 0
-	var totalFolders int64 = 0
+	var totalFiles int = 0
+	var totalFolders int = 0
 	var totalBytes int64 = 0
-	var deletedFiles int64 = 0
+	var deletedFiles int = 0
 	var deletedBytes int64 = 0
-	var errors int64 = 0
-	var aborted bool = false
+	var errors int = 0
 
 	// Map hash-value to file attribute & scanner.
-	mapping := make(map[string]MappingItem)
+	mapping := make(map[[sha256.Size]byte]HashItem)
 
 	// Iterate scanner one by one.
-	for i := 0; i < len(scanners); i++ {
-		totalFiles += scanners[i].GetTotalFiles()
-		totalFolders += scanners[i].GetTotalFolders()
-		totalBytes += scanners[i].GetTotalBytes()
+	for _, scanner := range scanners {
+		totalFiles += scanner.GetTotalFiles()
+		totalFolders += scanner.GetTotalFolders()
+		totalBytes += scanner.GetTotalBytes()
 
 		// Iterate file one by one.
-		for _, file := range scanners[i].GetFiles() {
-			// Get this file's hash value.
-			key := file.GetHashKey()
-
+		for _, file := range scanner.GetFiles() {
 			// Find if the hash already exists in the map.
-			if existing, found := mapping[key]; !found {
+			if existing, found := mapping[file.SHA256]; !found {
 				// It is a new hash.
-				mapping[key] = MappingItem{
-					File: file, Scanner: scanners[i],
+				mapping[file.SHA256] = HashItem{
+					File: file, Scanner: scanner,
 				}
 			} else {
 				// The hash already exists.
-				var deleted MappingItem
+				var deleted HashItem
 				var goAhead bool = true
 
 				// Check which file to remove
@@ -126,7 +160,7 @@ func main_i() int {
 
 				case DELETE_WHICH_SECOND:
 					deleted.File = file
-					deleted.Scanner = scanners[i]
+					deleted.Scanner = scanner
 
 				case DELETE_WHICH_NEITHER:
 					goAhead = false
@@ -134,32 +168,34 @@ func main_i() int {
 
 				// Prompt before remove file.
 				if goAhead && !force {
-					switch PromptDelete(deleted.File.Path) {
-					case PROMPT_YES_ALL:
+					switch promptDelete(deleted.File.Path) {
+					case PROMPT_ANSWER_NO:
+						goAhead = false
+
+					case PROMPT_ANSWER_ABORT:
+						goAhead = false
+						return 1
+
+					case PROMPT_ANSWER_YES_ALL:
 						force = true
 
-					case PROMPT_NO:
-						goAhead = false
-
-					case PROMPT_ABORT:
-						goAhead = false
-						aborted = true
-						break abortedLabel
+					case PROMPT_ANSWER_YES:
 					}
 				}
 
 				// Remove the file.
 				if goAhead {
+					// Remove the item and update hash map.
 					deleted.Scanner.Remove(deleted.File.Path)
 					if existing.File.Path != deleted.File.Path {
-						mapping[key] = MappingItem{
-							File: file, Scanner: scanners[i],
+						mapping[file.SHA256] = HashItem{
+							File: file, Scanner: scanner,
 						}
 					}
 
-					// Delete this file.
+					// Delete the file.
 					if err := os.Remove(deleted.File.Path); err != nil {
-						fmt.Fprintf(os.Stderr, "Could not delete file %v (%v)",
+						updater.Log(LOG_ERROR, "Could not delete file %v (%v)",
 							deleted.File.Path, err)
 						errors++
 					} else {
@@ -171,24 +207,18 @@ func main_i() int {
 		}
 	}
 
-	fmt.Println()
-	fmt.Printf("Total Files:   %v\n", totalFiles)
-	fmt.Printf("Total Folders: %v\n", totalFolders)
-	fmt.Printf("Total Size:    %v MB\n", totalBytes/(1024*1024))
-	fmt.Printf("Deleted Files: %v\n", deletedFiles)
-	fmt.Printf("Deleted Size:  %v MB\n", deletedBytes/(1024*1024))
-
-	if errors > 0 {
-		fmt.Printf("Errors:        %v\n", errors)
-	}
-
-abortedLabel:
-
 	// If a folder has changes, then update its local cache.
 	for _, scanner := range scanners {
-		if scanner.IsDirty() {
-			scanner.Save()
-		}
+		scanner.Save()
+	}
+
+	updater.Log(LOG_INFO, "")
+	updater.Log(LOG_INFO, "<Complete>")
+	updater.Log(LOG_INFO, "Deleted Files: %v", deletedFiles)
+	updater.Log(LOG_INFO, "Deleted Size:  %.3f MB", float64(deletedBytes)/(1024*1024))
+
+	if errors > 0 {
+		updater.Log(LOG_INFO, "Errors:        %v", errors)
 	}
 
 	return 0

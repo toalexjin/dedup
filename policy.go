@@ -1,5 +1,5 @@
 // File deduplication
-package aa
+package main
 
 import (
 	"errors"
@@ -14,13 +14,13 @@ const (
 	DELETE_WHICH_FIRST = iota
 
 	// The second file should be removed.
-	DELETE_WHICH_SECOND = iota
+	DELETE_WHICH_SECOND
 
 	// Either could be removed.
-	DELETE_WHICH_EITHER = iota
+	DELETE_WHICH_EITHER
 
 	// Neither could be removed.
-	DELETE_WHICH_NEITHER = iota
+	DELETE_WHICH_NEITHER
 )
 
 const (
@@ -28,10 +28,10 @@ const (
 	POLICY_CATEGORY_MOD_TIME = iota
 
 	// -1 means short name and 1 means long name.
-	POLICY_CATEGORY_NAME = iota
+	POLICY_CATEGORY_NAME
 
 	// -1 means short path and 1 means long path.
-	POLICY_CATEGORY_PATH = iota
+	POLICY_CATEGORY_PATH
 )
 
 // Number of policy categories.
@@ -49,9 +49,9 @@ var policyItemMapping = map[string]*policyItem{
 
 // Default policy.
 var defaultPolicyItems = []*policyItem{
-	&policyItem{category: POLICY_CATEGORY_MOD_TIME, value: 1},
 	&policyItem{category: POLICY_CATEGORY_NAME, value: 1},
 	&policyItem{category: POLICY_CATEGORY_PATH, value: 1},
+	&policyItem{category: POLICY_CATEGORY_MOD_TIME, value: 1},
 }
 
 // Policy interface.
@@ -74,6 +74,11 @@ type policyImpl struct {
 }
 
 func (me *policyImpl) DeleteWhich(first, second *FileAttr) int {
+	// We check file size here to avoid hash collision.
+	if first.Size != second.Size {
+		return DELETE_WHICH_NEITHER
+	}
+
 	// Check if the two paths are identical.
 	if os.PathSeparator == '/' {
 		if first.Path == second.Path {
