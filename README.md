@@ -46,7 +46,8 @@ e.g. Windows, Linux, Mac,...
 ## Build
 
 1. Install latest **Go Compiler** (https://golang.org)
-2. Set environment variable `$GOROOT=/path/to/go/compiler` and add it to $PATH.
-3. Set environment variable `$GOPATH=/path/to/my/code`.
-4. go get github.com/toalexjin/dedup
-5. $GOPATH/bin/dedup ...
+2. `export $GOROOT=/path/to/go/compiler`
+3. `export $PATH=$PATH:$GOROOT/bin`
+4. `export $GOPATH=/path/to/my/code`
+5. `go get github.com/toalexjin/dedup`
+6. `$GOPATH/bin/dedup`
