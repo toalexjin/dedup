@@ -2,18 +2,19 @@
 package main
 
 import (
-	"crypto/sha256"
+	"bufio"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 )
 
 // Return value of promptDelete()
 const (
-	PROMPT_ANSWER_NO = iota
-	PROMPT_ANSWER_ABORT
-	PROMPT_ANSWER_YES_ALL
-	PROMPT_ANSWER_YES
+	PROMPT_ANSWER_YES = iota
+	PROMPT_ANSWER_NO
+	PROMPT_ANSWER_ALL
+	PROMPT_ANSWER_QUIT
 )
 
 func usage() {
@@ -53,9 +54,28 @@ func getAbsoleteUniquePaths(paths []string) []string {
 // Return value is PROMPT_ANSWER_???
 func promptDelete(file string) int {
 
-	// TO-DO
+	// Create a buffered reader.
+	reader := bufio.NewReader(os.Stdin)
 
-	return PROMPT_ANSWER_YES_ALL
+	for {
+		fmt.Printf("Delete %v? Yes/All/No/Quit:", file)
+		if line, _, err := reader.ReadLine(); err == nil {
+
+			switch strings.ToLower(string(line)) {
+			case "y", "yes":
+				return PROMPT_ANSWER_YES
+
+			case "n", "no":
+				return PROMPT_ANSWER_NO
+
+			case "a", "all":
+				return PROMPT_ANSWER_ALL
+
+			case "q", "quit":
+				return PROMPT_ANSWER_QUIT
+			}
+		}
+	}
 }
 
 // Map SHA256 hash to file.
@@ -103,7 +123,7 @@ func main_i() int {
 
 	// Scan files.
 	for _, scanner := range scanners {
-		updater.Log(LOG_INFO, "Scan %v...", scanner.GetPath())
+		updater.Log(LOG_INFO, "Scanning %v...", scanner.GetPath())
 
 		if err := scanner.Scan(updater); err != nil {
 			return 1
@@ -129,7 +149,7 @@ func main_i() int {
 	var errors int = 0
 
 	// Map hash-value to file attribute & scanner.
-	mapping := make(map[[sha256.Size]byte]HashItem)
+	mapping := make(map[SHA256Digest]HashItem)
 
 	// Iterate scanner one by one.
 	for _, scanner := range scanners {
@@ -169,17 +189,17 @@ func main_i() int {
 				// Prompt before remove file.
 				if goAhead && !force {
 					switch promptDelete(deleted.File.Path) {
+					case PROMPT_ANSWER_YES:
+
+					case PROMPT_ANSWER_ALL:
+						force = true
+
 					case PROMPT_ANSWER_NO:
 						goAhead = false
 
-					case PROMPT_ANSWER_ABORT:
+					case PROMPT_ANSWER_QUIT:
 						goAhead = false
 						return 1
-
-					case PROMPT_ANSWER_YES_ALL:
-						force = true
-
-					case PROMPT_ANSWER_YES:
 					}
 				}
 
@@ -199,6 +219,7 @@ func main_i() int {
 							deleted.File.Path, err)
 						errors++
 					} else {
+						updater.Log(LOG_INFO, "File %v was deleted.", deleted.File.Path)
 						deletedBytes += deleted.File.Size
 						deletedFiles++
 					}

@@ -94,28 +94,52 @@ func (me *policyImpl) DeleteWhich(first, second *FileAttr) int {
 		switch item.category {
 		case POLICY_CATEGORY_MOD_TIME:
 			if first.ModTime != second.ModTime {
-				if item.value < 0 && first.ModTime < second.ModTime {
-					return DELETE_WHICH_FIRST
+				if first.ModTime < second.ModTime {
+					if item.value < 0 {
+						return DELETE_WHICH_FIRST
+					} else {
+						return DELETE_WHICH_SECOND
+					}
 				} else {
-					return DELETE_WHICH_SECOND
+					if item.value < 0 {
+						return DELETE_WHICH_SECOND
+					} else {
+						return DELETE_WHICH_FIRST
+					}
 				}
 			}
 
 		case POLICY_CATEGORY_NAME:
 			if len(first.Name) != len(second.Name) {
-				if item.value < 0 && len(first.Name) < len(second.Name) {
-					return DELETE_WHICH_FIRST
+				if len(first.Name) < len(second.Name) {
+					if item.value < 0 {
+						return DELETE_WHICH_FIRST
+					} else {
+						return DELETE_WHICH_SECOND
+					}
 				} else {
-					return DELETE_WHICH_SECOND
+					if item.value < 0 {
+						return DELETE_WHICH_SECOND
+					} else {
+						return DELETE_WHICH_FIRST
+					}
 				}
 			}
 
 		case POLICY_CATEGORY_PATH:
 			if len(first.Path) != len(second.Path) {
-				if item.value < 0 && len(first.Path) < len(second.Path) {
-					return DELETE_WHICH_FIRST
+				if len(first.Path) < len(second.Path) {
+					if item.value < 0 {
+						return DELETE_WHICH_FIRST
+					} else {
+						return DELETE_WHICH_SECOND
+					}
 				} else {
-					return DELETE_WHICH_SECOND
+					if item.value < 0 {
+						return DELETE_WHICH_SECOND
+					} else {
+						return DELETE_WHICH_FIRST
+					}
 				}
 			}
 		}

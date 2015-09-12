@@ -47,10 +47,10 @@ func (me *updaterImpl) SetError(err error) {
 func getLevelPrefix(level int) string {
 	switch level {
 	case LOG_TRACE:
-		return "<T> "
+		return ""
 
 	case LOG_INFO:
-		return "<I> "
+		return ""
 
 	case LOG_WARN:
 		return "<W> "

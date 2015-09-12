@@ -3,20 +3,29 @@ package main
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"hash"
 	"io"
 	"os"
 	"strings"
 )
 
+// SHA256 hash value
+type SHA256Digest [sha256.Size]byte
+
+// Convert sha256 to a string.
+func (me *SHA256Digest) String() string {
+	return hex.EncodeToString((*me)[:])
+}
+
 // File attributes.
 type FileAttr struct {
-	Path       string            // Full path.
-	Name       string            // Name.
-	ModTime    int64             // the number of nanoseconds elapsed since January 1, 1970 UTC
-	Size       int64             // File size, in bytes.
-	SHA256     [sha256.Size]byte // SHA256 checksum.
-	StillExist bool              // Indicates if the file still exists.
+	Path       string       // Full path.
+	Name       string       // Name.
+	ModTime    int64        // the number of nanoseconds elapsed since January 1, 1970 UTC
+	Size       int64        // File size, in bytes.
+	SHA256     SHA256Digest // SHA256 checksum.
+	StillExist bool         // Indicates if the file still exists.
 }
 
 // File scanner interface.
@@ -153,7 +162,7 @@ func (me *fileScannerImpl) scanFolder(updater Updater) error {
 		path := folders[head]
 		head++
 
-		updater.Log(LOG_TRACE, "Scan folder %v...", path)
+		updater.Log(LOG_TRACE, "Scanning folder %v...", path)
 
 		// Open this folder.
 		fp, err := os.Open(path)
@@ -235,7 +244,7 @@ func (me *fileScannerImpl) scanFile(
 	if value, found := me.files[key]; found {
 		if value.Size == info.Size() && value.ModTime == info.ModTime().UnixNano() {
 			// Write trace log message.
-			updater.Log(LOG_TRACE, "%v (sha256 hash:%v)", path, value.SHA256)
+			updater.Log(LOG_TRACE, "%v (%v)", path, &value.SHA256)
 
 			// Update file count and total size.
 			me.totalFiles++
@@ -294,7 +303,7 @@ func (me *fileScannerImpl) scanFile(
 	me.totalBytes += info.Size()
 
 	// Write a trace log message.
-	updater.Log(LOG_TRACE, "%v (sha256 hash:%v)", path, newValue.SHA256)
+	updater.Log(LOG_TRACE, "%v (%v)", path, &newValue.SHA256)
 
 	return nil
 }
