@@ -20,12 +20,24 @@ func (me *SHA256Digest) String() string {
 
 // File attributes.
 type FileAttr struct {
-	Path       string       // Full path.
-	Name       string       // Name.
-	ModTime    int64        // the number of nanoseconds elapsed since January 1, 1970 UTC
-	Size       int64        // File size, in bytes.
-	SHA256     SHA256Digest // SHA256 checksum.
-	StillExist bool         // Indicates if the file still exists.
+	Path    string       // Full path.
+	Name    string       // Name.
+	ModTime int64        // the number of nanoseconds elapsed since January 1, 1970 UTC
+	Size    int64        // File size, in bytes.
+	SHA256  SHA256Digest // SHA256 checksum.
+
+	// Detailed information.
+	//
+	// With detailed information, we could know if two files
+	// are the same by calling os.SameFile().
+	//
+	// After loading saved file list from local disk cache,
+	// this field is null. While scanning files,
+	// this field will be set to valid value.
+	// If thie field is still null after scanning files,
+	// then it means that the file no longer exists in disk
+	// and should be removed from map.
+	Details os.FileInfo
 }
 
 // File scanner interface.
@@ -250,7 +262,8 @@ func (me *fileScannerImpl) scanFile(
 			me.totalFiles++
 			me.totalBytes += info.Size()
 
-			value.StillExist = true
+			// Set FileAttr.Details to valid value.
+			value.Details = info
 			return nil
 		}
 	}
@@ -287,11 +300,11 @@ func (me *fileScannerImpl) scanFile(
 
 	// Create a new object.
 	newValue := &FileAttr{
-		Path:       path,
-		Name:       info.Name(),
-		ModTime:    info.ModTime().UnixNano(),
-		Size:       info.Size(),
-		StillExist: true,
+		Path:    path,
+		Name:    info.Name(),
+		ModTime: info.ModTime().UnixNano(),
+		Size:    info.Size(),
+		Details: info,
 	}
 	copy(newValue.SHA256[:], me.hashEngine.Sum(nil))
 
@@ -312,7 +325,7 @@ func (me *fileScannerImpl) scanFile(
 // let's remove them from the map.
 func (me *fileScannerImpl) removeNonExistFiles() {
 	for key, value := range me.files {
-		if !value.StillExist {
+		if value.Details == nil {
 			delete(me.files, key)
 		}
 	}

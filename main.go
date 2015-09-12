@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -39,16 +40,26 @@ func usage() {
 	fmt.Println()
 }
 
-// Input paths might be duplicated and might be relative paths,
-// we need to remove duplicated and convert all to absolete paths.
-func getAbsoleteUniquePaths(paths []string) []string {
+// Input paths might be relative and duplicated,
+// we need to convert to absolute paths and remove duplicated.
+func getAbsUniquePaths(paths []string) ([]string, error) {
 
-	// TO-DO:
-	//
-	// Convert relative paths to absolte
-	// Remove duplicated ...
+	// For storing unique paths.
+	uniquePaths := make([]string, 0, len(paths))
 
-	return paths
+	for _, path := range paths {
+
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Invalid argument %v (%v)\n", path, err)
+			return nil, err
+		}
+
+		absPath = filepath.Clean(absPath)
+		uniquePaths = append(uniquePaths, absPath)
+	}
+
+	return uniquePaths, nil
 }
 
 // Return value is PROMPT_ANSWER_???
@@ -104,11 +115,16 @@ func main_i() int {
 		return 1
 	}
 
+	// Convert input paths to absolute.
+	paths, err := getAbsUniquePaths(flag.Args())
+	if err != nil {
+		return 1
+	}
+
 	// Create a updater callback object.
 	updater := NewUpdater(verbose)
 
 	// Create file scanner for each path.
-	paths := getAbsoleteUniquePaths(flag.Args())
 	scanners := make([]FileScanner, len(paths))
 
 	for i := 0; i < len(paths); i++ {
