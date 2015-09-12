@@ -19,6 +19,7 @@ const (
 )
 
 func usage() {
+	fmt.Println("Copyright 2015 (C) Alex Jin (toalexjin@hotmail.com)")
 	fmt.Println("Remove duplicated files from your system.")
 	fmt.Println()
 	fmt.Println("Usage: dedup [-v] [-f] [-p <policy>,...] <path>...")

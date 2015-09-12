@@ -30,12 +30,12 @@ dedup [-v] [-f] [-p <policy,...>] <path>...
 ## Design
 
 The program scans all files of specified folders, calculates SHA256 hash
-for each of them. If two files have the same SHA256 hash, then they
-are the same. To save time for scanning files, the program would save
-all files' SHA256 hash in user home directory. When the program runs
-next time, it would load the saved SHA256 hash first. If a file's size
-and last modification time are not changed, then the program would not
-calculate SHA256 hash for the file again.
+for each of them. If two files have the same SHA256 hash, then the two files
+would be considered as the same. To save time for calculating SHA256 hash,
+the program would save all files' SHA256 hash in user home directory.
+When the program runs next time, it would load the saved SHA256 hash first.
+If file size and last modification time are not changed, then the program
+would not calculate SHA256 hash for the file again.
 
 ## Supported Platforms
 
@@ -46,8 +46,7 @@ e.g. Windows, Linux, Mac,...
 ## Build
 
 1. Install latest **Go Compiler** (https://golang.org)
-2. Set environment variable `$GOROOT=/path/to/go` and add it to $PATH.
-3. git clone https://github.com/toalexjin/dedup.git
-4. cd dedup
-5. go build
-6. ./dedup ...
+2. Set environment variable `$GOROOT=/path/to/go/compiler` and add it to $PATH.
+3. Set environment variable `$GOPATH=/path/to/my/code`.
+4. go get github.com/toalexjin/dedup
+5. $GOPATH/bin/dedup ...
