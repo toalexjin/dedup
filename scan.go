@@ -98,7 +98,7 @@ func NewFileScanner(path string, info os.FileInfo) FileScanner {
 		path: path, info: info,
 		files:      make(map[string]*FileAttr),
 		hashEngine: sha256.New(),
-		buffer:     make([]byte, 16*1024),
+		buffer:     make([]byte, 512*1024),
 	}
 }
 
@@ -145,9 +145,7 @@ func (me *fileScannerImpl) Scan(updater Updater) error {
 			return err
 		}
 	} else {
-		if err := me.scanFile(me.path, me.info, updater); err != nil {
-			return err
-		}
+		me.scanFile(me.path, me.info, updater)
 	}
 
 	// Some files do not exist in disk any more,
@@ -165,8 +163,8 @@ func (me *fileScannerImpl) scanFolder(updater Updater) error {
 	folders = append(folders, me.path)
 
 	for head < tail {
-		// Check if job was cancelled or an error ever happened.
-		if err := updater.Error(); err != nil {
+		// Check if fatal error ever happened.
+		if err := updater.FatalError(); err != nil {
 			return err
 		}
 
@@ -174,30 +172,29 @@ func (me *fileScannerImpl) scanFolder(updater Updater) error {
 		path := folders[head]
 		head++
 
-		updater.Log(LOG_TRACE, "Scanning folder %v...", path)
+		if len(path) > len(me.path) {
+			updater.Log(LOG_TRACE, "Scanning %v...", path)
+		}
 
 		// Open this folder.
 		fp, err := os.Open(path)
 		if err != nil {
+			updater.IncreaseErrors()
 			updater.Log(LOG_ERROR, "Could not open folder %v. Error:%v", path, err)
-			updater.SetError(err)
-			return err
+			continue
 		}
 
 		for {
 			items, errReadDir := fp.Readdir(512)
 			if errReadDir != nil && errReadDir != io.EOF {
+				updater.IncreaseErrors()
 				updater.Log(LOG_ERROR, "Could not enumerate folder %v. Error:%v", path, errReadDir)
-				updater.SetError(errReadDir)
-
-				// Close the folder
-				fp.Close()
-				return errReadDir
+				break
 			}
 
 			for i := 0; i < len(items); i++ {
-				// Check if job was cancelled or an error ever happened.
-				if err := updater.Error(); err != nil {
+				// Check if fatal error ever happened.
+				if err := updater.FatalError(); err != nil {
 					// Close the folder
 					fp.Close()
 					return err
@@ -205,7 +202,7 @@ func (me *fileScannerImpl) scanFolder(updater Updater) error {
 
 				var subPath string
 
-				if len(path) == 1 && path == "/" {
+				if len(path) > 0 && path[len(path)-1] == os.PathSeparator {
 					subPath = path + items[i].Name()
 				} else {
 					subPath = path + string(os.PathSeparator) + items[i].Name()
@@ -217,11 +214,7 @@ func (me *fileScannerImpl) scanFolder(updater Updater) error {
 					tail++
 					me.totalFolders++
 				} else if items[i].Mode().IsRegular() {
-					if err := me.scanFile(subPath, items[i], updater); err != nil {
-						// Close the folder
-						fp.Close()
-						return err
-					}
+					me.scanFile(subPath, items[i], updater)
 				}
 			}
 
@@ -271,6 +264,7 @@ func (me *fileScannerImpl) scanFile(
 	// Open file.
 	fp, err := os.Open(path)
 	if err != nil {
+		updater.IncreaseErrors()
 		updater.Log(LOG_ERROR, "Could not open file %v. Error:%v", path, err)
 		return err
 	}
@@ -281,13 +275,14 @@ func (me *fileScannerImpl) scanFile(
 
 	// Read file content
 	for {
-		// Check if job was cancelled or an error ever happened.
-		if err := updater.Error(); err != nil {
+		// Check if fatal error ever happened.
+		if err := updater.FatalError(); err != nil {
 			return err
 		}
 
 		n, err := fp.Read(me.buffer)
 		if err != nil && err != io.EOF {
+			updater.IncreaseErrors()
 			updater.Log(LOG_ERROR, "Could not read file %v. Error:%v", path, err)
 			return err
 		}

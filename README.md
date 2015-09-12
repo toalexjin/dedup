@@ -6,25 +6,36 @@ For instance, removing duplicated pictures to free disk space.
 ## Usage
 
 ```
-dedup [-f] [-p <policy,...>] <path>...
+dedup [-v] [-f] [-p <policy,...>] <path>...
 ```
 
 **Options and Arguments:**
 
+- `-v`: Verbose mode.
 - `-f`: Do not prompt before removing files.
 - `-p <policy,...>`:
-    - **new**: Remove duplicated files with newer last modification time.
-    - **old**: Remove duplicated files with older last modification time.
     - **longname**: Remove duplicated files with longer file name.
     - **shortname**: Remove duplicated files with shorter file name.
     - **longpath**: Remove duplicated files with longer full path.
     - **shortpath**: Remove duplicated files with shorter full path.
+    - **new**: Remove duplicated files with newer last modification time.
+    - **old**: Remove duplicated files with older last modification time.
 - `<path>...`:  One or multiple file paths to scan.
 
 **Remark**:
 
 - If option `-p <policy,...>` is not specified, then default policy
-  `-p new,longname,longpath` will be used.
+  `-p longname,longpath,new` will be used.
+
+## Design
+
+The program scans all files of specified folders, calculates SHA256 hash
+for each of them. If two files have the same SHA256 hash, then they
+are the same. To save time for scanning files, the program would save
+all files' SHA256 hash in user home directory. When the program runs
+next time, it would load the saved SHA256 hash first. If a file's size
+and last modification time are not changed, then the program would not
+calculate SHA256 hash for the file again.
 
 ## Supported Platforms
 

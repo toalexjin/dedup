@@ -15,33 +15,49 @@ const (
 
 // Update status.
 type Updater interface {
-	// Job was cancelled or an error ever happened.
-	Error() error
+	// Job was cancelled or an fatal error ever happened.
+	FatalError() error
 
-	// Set error code.
-	SetError(err error)
+	// Set fatal error code.
+	SetFatalError(err error)
+
+	// Get error count.
+	Errors() int
+
+	// Increase error count by 1.
+	IncreaseErrors()
 
 	// Write log message.
 	Log(level int, format string, a ...interface{})
 }
 
 type updaterImpl struct {
-	err     error // Error.
-	verbose bool  // Verbose mode.
+	fatalError error // Fatal Error.
+	errors     int   // Error count.
+	verbose    bool  // Verbose mode.
 }
 
 func NewUpdater(verbose bool) Updater {
 	return &updaterImpl{verbose: verbose}
 }
 
-func (me *updaterImpl) Error() error {
-	return me.err
+func (me *updaterImpl) FatalError() error {
+	return me.fatalError
 }
 
-func (me *updaterImpl) SetError(err error) {
-	if me.err == nil {
-		me.err = err
+func (me *updaterImpl) SetFatalError(fatalError error) {
+	if me.fatalError == nil {
+		me.fatalError = fatalError
 	}
+}
+
+func (me *updaterImpl) Errors() int {
+	return me.errors
+}
+
+// Increase error count by 1.
+func (me *updaterImpl) IncreaseErrors() {
+	me.errors++
 }
 
 func getLevelPrefix(level int) string {

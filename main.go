@@ -29,14 +29,14 @@ func usage() {
 	fmt.Println("    -p:        Policy indicates which files to remove.")
 	fmt.Println()
 	fmt.Println("<policy>:")
-	fmt.Println("    new:       Remove duplicated files with newer last modification time.")
-	fmt.Println("    old:       Remove duplicated files with older last modification time.")
 	fmt.Println("    longname:  Remove duplicated files with longer file name.")
 	fmt.Println("    shortname: Remove duplicated files with shorter file name.")
 	fmt.Println("    longpath:  Remove duplicated files with longer full path.")
 	fmt.Println("    shortpath: Remove duplicated files with shorter full path.")
+	fmt.Println("    new:       Remove duplicated files with newer last modification time.")
+	fmt.Println("    old:       Remove duplicated files with older last modification time.")
 	fmt.Println()
-	fmt.Println("Default <policy>: \"longname,new,longpath\"")
+	fmt.Println("Default <policy>: \"longname,longpath,new\"")
 	fmt.Println()
 }
 
@@ -69,7 +69,7 @@ func promptDelete(file string) int {
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
-		fmt.Printf("Delete %v? Yes/All/No/Quit:", file)
+		fmt.Printf("Delete %v? Yes,All,No,Quit: ", file)
 		if line, _, err := reader.ReadLine(); err == nil {
 
 			switch strings.ToLower(string(line)) {
@@ -162,7 +162,6 @@ func main_i() int {
 	var totalBytes int64 = 0
 	var deletedFiles int = 0
 	var deletedBytes int64 = 0
-	var errors int = 0
 
 	// Map hash-value to file attribute & scanner.
 	mapping := make(map[SHA256Digest]HashItem)
@@ -233,7 +232,7 @@ func main_i() int {
 					if err := os.Remove(deleted.File.Path); err != nil {
 						updater.Log(LOG_ERROR, "Could not delete file %v (%v)",
 							deleted.File.Path, err)
-						errors++
+						updater.IncreaseErrors()
 					} else {
 						updater.Log(LOG_INFO, "File %v was deleted.", deleted.File.Path)
 						deletedBytes += deleted.File.Size
@@ -254,8 +253,8 @@ func main_i() int {
 	updater.Log(LOG_INFO, "Deleted Files: %v", deletedFiles)
 	updater.Log(LOG_INFO, "Deleted Size:  %.3f MB", float64(deletedBytes)/(1024*1024))
 
-	if errors > 0 {
-		updater.Log(LOG_INFO, "Errors:        %v", errors)
+	if updater.Errors() > 0 {
+		updater.Log(LOG_INFO, "Errors:        %v", updater.Errors())
 	}
 
 	return 0
