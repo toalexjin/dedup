@@ -427,6 +427,7 @@ func (me *fileScannerImpl) removeNonExistFiles() {
 	for key, value := range me.files {
 		if value.Details == nil {
 			delete(me.files, key)
+			me.dirty = true
 		}
 	}
 }
