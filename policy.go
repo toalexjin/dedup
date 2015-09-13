@@ -156,11 +156,7 @@ func (me *policyImpl) DeleteWhich(first, second *FileAttr) int {
 
 // Get policy item based on name.
 func getPolicyItem(name string) *policyItem {
-	if item, found := policyItemMapping[name]; found {
-		return item
-	} else {
-		return nil
-	}
+	return policyItemMapping[name]
 }
 
 // Check if a policy item exists in an array.
