@@ -123,6 +123,13 @@ func main_i() int {
 		return 1
 	}
 
+	// Create a policy to determine which file to delete.
+	policy, err := NewPolicy(policySpec)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		return 1
+	}
+
 	// Convert input paths to absolute.
 	paths, err := getAbsUniquePaths(flag.Args())
 	if err != nil {
@@ -160,12 +167,6 @@ func main_i() int {
 			scanner.GetTotalFiles(), scanner.GetTotalFolders(),
 			float64(scanner.GetTotalBytes())/(1024*1024))
 		updater.Log(LOG_INFO, "")
-	}
-
-	// Create a policy to determine which file to delete.
-	policy, err := NewPolicy(policySpec)
-	if err != nil {
-		updater.Log(LOG_ERROR, "%v", err)
 	}
 
 	// Result variables
