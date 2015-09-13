@@ -6,13 +6,14 @@ For instance, removing duplicated pictures to free disk space.
 ## Usage
 
 ```
-dedup [-v] [-f] [-p <policy,...>] <path>...
+dedup [-v] [-f] [-t] [-p <policy,...>] <path>...
 ```
 
 **Options and Arguments:**
 
 - `-v`: Verbose mode.
 - `-f`: Do not prompt before removing files.
+- `-t`: Show duplicated files, do not delete them.
 - `-p <policy,...>`:
     - **longname**: Remove duplicated files with longer file name.
     - **shortname**: Remove duplicated files with shorter file name.

@@ -45,6 +45,11 @@ type FileAttr struct {
 	Details os.FileInfo
 }
 
+func (me *FileAttr) String() string {
+	return fmt.Sprintf("%v(%v,%v bytes,%v)",
+		me.Path, me.Name, me.Size, &me.SHA256)
+}
+
 // Read a FileAttr object from cache file.
 func (me *FileAttr) ReadCache(reader *bufio.Reader) error {
 	var str string
@@ -467,6 +472,9 @@ func (me *fileScannerImpl) ReadCache() error {
 		return err
 	}
 
+	// Print trace log message.
+	me.updater.Log(LOG_TRACE, "Reading cache %v...", cache)
+
 	// Open cache file.
 	fp, err := os.Open(cache)
 	if err != nil {
@@ -492,6 +500,8 @@ func (me *fileScannerImpl) ReadCache() error {
 		if err != nil {
 			return err
 		}
+
+		me.updater.Log(LOG_TRACE, "Cache info: %v", object)
 
 		// File path is map key.
 		key := object.Path
@@ -520,6 +530,9 @@ func (me *fileScannerImpl) SaveCache() error {
 	if err != nil {
 		return err
 	}
+
+	// Print trace log message.
+	me.updater.Log(LOG_TRACE, "Updating cache %v...", cache)
 
 	// Create a new cache file.
 	fp, err := os.OpenFile(cache, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)

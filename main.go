@@ -22,11 +22,12 @@ func usage() {
 	fmt.Println("Copyright 2015 (C) Alex Jin (toalexjin@hotmail.com)")
 	fmt.Println("Remove duplicated files from your system.")
 	fmt.Println()
-	fmt.Println("Usage: dedup [-v] [-f] [-p <policy>,...] <path>...")
+	fmt.Println("Usage: dedup [-v] [-f] [-t] [-p <policy>,...] <path>...")
 	fmt.Println()
 	fmt.Println("Options and Arguments:")
 	fmt.Println("    -v:        Verbose mode.")
 	fmt.Println("    -f:        Do not prompt before removing files.")
+	fmt.Println("    -t:        Show duplicated files, do not delete them.")
 	fmt.Println("    -p:        Policy indicates which files to remove.")
 	fmt.Println()
 	fmt.Println("<policy>:")
@@ -59,6 +60,10 @@ func getAbsUniquePaths(paths []string) ([]string, error) {
 		absPath = filepath.Clean(absPath)
 		uniquePaths = append(uniquePaths, absPath)
 	}
+
+	// TO-DO.
+	//
+	// Remove duplicated paths (sub-paths) from the array.
 
 	return uniquePaths, nil
 }
@@ -102,11 +107,13 @@ func main_i() int {
 
 	var verbose bool
 	var force bool
+	var test bool
 	var policySpec string
 
 	// Parse command line options.
 	flag.BoolVar(&verbose, "v", false, "Verbose mode.")
 	flag.BoolVar(&force, "f", false, "Do not prompt before removing files.")
+	flag.BoolVar(&test, "t", false, "Show duplicated files, do not delete them.")
 	flag.StringVar(&policySpec, "p", "", "Policy indicates which files to remove.")
 	flag.Parse()
 
@@ -152,6 +159,7 @@ func main_i() int {
 		updater.Log(LOG_INFO, "%v files, %v folders, %.3f MB",
 			scanner.GetTotalFiles(), scanner.GetTotalFolders(),
 			float64(scanner.GetTotalBytes())/(1024*1024))
+		updater.Log(LOG_INFO, "")
 	}
 
 	// Create a policy to determine which file to delete.
@@ -186,13 +194,15 @@ func main_i() int {
 				}
 			} else {
 				// The hash already exists.
-				var deleted HashItem
+				var deleted, remain HashItem
 				var goAhead bool = true
 
 				// Check which file to remove
 				switch policy.DeleteWhich(existing.File, file) {
 				case DELETE_WHICH_FIRST:
 					deleted = existing
+					remain.File = file
+					remain.Scanner = scanner
 
 				case DELETE_WHICH_EITHER:
 					fallthrough
@@ -200,13 +210,14 @@ func main_i() int {
 				case DELETE_WHICH_SECOND:
 					deleted.File = file
 					deleted.Scanner = scanner
+					remain = existing
 
 				case DELETE_WHICH_NEITHER:
 					goAhead = false
 				}
 
 				// Prompt before remove file.
-				if goAhead && !force {
+				if !test && goAhead && !force {
 					switch promptDelete(deleted.File.Path) {
 					case PROMPT_ANSWER_YES:
 
@@ -225,22 +236,37 @@ func main_i() int {
 				// Remove the file.
 				if goAhead {
 					// Remove the item and update hash map.
-					deleted.Scanner.Remove(deleted.File.Path)
 					if existing.File.Path != deleted.File.Path {
 						mapping[file.SHA256] = HashItem{
 							File: file, Scanner: scanner,
 						}
 					}
 
-					// Delete the file.
-					if err := os.Remove(deleted.File.Path); err != nil {
-						updater.Log(LOG_ERROR, "Could not delete file %v (%v)",
-							deleted.File.Path, err)
-						updater.IncreaseErrors()
-					} else {
-						updater.Log(LOG_INFO, "File %v was deleted.", deleted.File.Path)
+					if test {
+						// Show duplicated files, do not delete them.
+						//
+						// Be aware that we do not remove dupliated files
+						// from the map because we want to save their
+						// SHA256 hashes in local cache.
+						updater.Log(LOG_INFO, "%v is duplicated (%v).",
+							deleted.File.Path, remain.File.Path)
+
 						deletedBytes += deleted.File.Size
 						deletedFiles++
+					} else {
+						// Delete duplicated file from the map.
+						deleted.Scanner.Remove(deleted.File.Path)
+
+						// Delete duplicated file from disk.
+						if err := os.Remove(deleted.File.Path); err != nil {
+							updater.Log(LOG_ERROR, "Could not delete file %v (%v).",
+								deleted.File.Path, err)
+							updater.IncreaseErrors()
+						} else {
+							updater.Log(LOG_INFO, "File %v was deleted.", deleted.File.Path)
+							deletedBytes += deleted.File.Size
+							deletedFiles++
+						}
 					}
 				}
 			}
@@ -252,10 +278,19 @@ func main_i() int {
 		scanner.SaveCache()
 	}
 
-	updater.Log(LOG_INFO, "")
-	updater.Log(LOG_INFO, "<Complete>")
-	updater.Log(LOG_INFO, "Deleted Files: %v", deletedFiles)
-	updater.Log(LOG_INFO, "Deleted Size:  %.3f MB", float64(deletedBytes)/(1024*1024))
+	if deletedFiles > 0 {
+		updater.Log(LOG_INFO, "")
+	}
+
+	updater.Log(LOG_INFO, "<Summary>")
+
+	if test {
+		updater.Log(LOG_INFO, "Duplicated Files: %v", deletedFiles)
+		updater.Log(LOG_INFO, "Duplicated Size:  %.3f MB", float64(deletedBytes)/(1024*1024))
+	} else {
+		updater.Log(LOG_INFO, "Deleted Files:    %v", deletedFiles)
+		updater.Log(LOG_INFO, "Deleted Size:     %.3f MB", float64(deletedBytes)/(1024*1024))
+	}
 
 	if updater.Errors() > 0 {
 		updater.Log(LOG_INFO, "Errors:        %v", updater.Errors())
