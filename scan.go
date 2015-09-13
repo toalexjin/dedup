@@ -2,11 +2,16 @@
 package main
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"hash"
 	"io"
 	"os"
+	"os/user"
+	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -38,6 +43,90 @@ type FileAttr struct {
 	// then it means that the file no longer exists in disk
 	// and should be removed from map.
 	Details os.FileInfo
+}
+
+// Read a FileAttr object from cache file.
+func (me *FileAttr) ReadCache(reader *bufio.Reader) error {
+	var str string
+
+	for {
+		line, isPrefix, err := reader.ReadLine()
+		if err != nil {
+			return err
+		}
+
+		if len(str) == 0 {
+			str = string(line)
+		} else {
+			str += string(line)
+		}
+
+		if !isPrefix {
+			break
+		}
+	}
+
+	fields := strings.Split(str, "|")
+	if len(fields) != 4 {
+		return ErrInvalidCacheFile
+	}
+
+	if !filepath.IsAbs(fields[0]) {
+		return ErrInvalidCacheFile
+	}
+
+	// Path.
+	me.Path = fields[0]
+
+	// Name.
+	index := strings.LastIndexByte(me.Path, os.PathSeparator)
+	if index == -1 || index == (len(me.Path)-1) {
+		return ErrInvalidCacheFile
+	}
+	pathBytes := []byte(me.Path)
+	me.Name = string(pathBytes[index+1:])
+
+	// Mod time.
+	if number, err := strconv.ParseInt(fields[1], 10, 64); err != nil {
+		return err
+	} else if number < 0 {
+		return ErrInvalidCacheFile
+	} else {
+		me.ModTime = number
+	}
+
+	// Size.
+	if number, err := strconv.ParseInt(fields[2], 10, 64); err != nil {
+		return err
+	} else if number < 0 {
+		return ErrInvalidCacheFile
+	} else {
+		me.Size = number
+	}
+
+	// SHA256 Hash.
+	if digest, err := hex.DecodeString(fields[3]); err != nil {
+		return err
+	} else if len(digest) != sha256.Size {
+		return ErrInvalidCacheFile
+	} else {
+		copy(me.SHA256[:], digest)
+	}
+
+	// Field "Details" now is null, will be set to
+	// valid value when scanning files.
+	me.Details = nil
+
+	return nil
+}
+
+// Write a FileAttr object to cache file.
+func (me *FileAttr) SaveCache(writer *bufio.Writer) error {
+	str := fmt.Sprintf("%v|%v|%v|%v\n",
+		me.Path, me.ModTime, me.Size, &me.SHA256)
+
+	_, err := writer.WriteString(str)
+	return err
 }
 
 // File scanner interface.
@@ -75,8 +164,11 @@ type FileScanner interface {
 	// Scan files
 	Scan() error
 
+	// Read cache saved by previous scan.
+	ReadCache() error
+
 	// Save file hashes to speed up next scan.
-	Save() error
+	SaveCache() error
 }
 
 // File scanner implementation.
@@ -136,13 +228,13 @@ func (me *fileScannerImpl) Remove(path string) {
 	}
 
 	delete(me.files, key)
+
+	// A file was removed from the map,
+	// set dirty flag to true.
 	me.dirty = true
 }
 
 func (me *fileScannerImpl) Scan() error {
-	// Load file list of the previous scan.
-	me.loadCache()
-
 	// Scan files.
 	if me.info.IsDir() {
 		if err := me.scanFolder(); err != nil {
@@ -240,7 +332,7 @@ func (me *fileScannerImpl) scanFile(
 	path string, info os.FileInfo) error {
 
 	// File path is map key.
-	var key string = path
+	key := path
 
 	// Convert file path to lower case on Windows.
 	if os.PathSeparator != '/' {
@@ -314,6 +406,10 @@ func (me *fileScannerImpl) scanFile(
 	me.totalFiles++
 	me.totalBytes += info.Size()
 
+	// A new file was added to the map,
+	// set dirty flag to true.
+	me.dirty = true
+
 	// Write a trace log message.
 	me.updater.Log(LOG_TRACE, "%v (%v)", path, &newValue.SHA256)
 
@@ -330,19 +426,122 @@ func (me *fileScannerImpl) removeNonExistFiles() {
 	}
 }
 
-func (me *fileScannerImpl) loadCache() {
-	// TO-DO: Load cache from local disk.
+func (me *fileScannerImpl) getCacheFile(readonly bool) (string, error) {
+
+	// Get user home directory.
+	current, err := user.Current()
+	if err != nil {
+		return "", err
+	}
+
+	// Get the directory where cache files are located.
+	dir := filepath.Join(current.HomeDir, ".dedup")
+
+	// Create the directory if it does not exist.
+	if !readonly {
+		if _, err := os.Stat(dir); err != nil {
+			if err := os.Mkdir(dir, os.ModePerm); err != nil {
+				return "", err
+			}
+		}
+	}
+
+	key := me.path
+	if os.PathSeparator != '/' {
+		key = strings.ToLower(key)
+	}
+
+	me.hashEngine.Reset()
+	me.hashEngine.Write([]byte(key))
+	name := hex.EncodeToString(me.hashEngine.Sum(nil)) + ".dat"
+
+	path := dir + string(os.PathSeparator) + name
+
+	return path, nil
 }
 
-func (me *fileScannerImpl) Save() error {
+func (me *fileScannerImpl) ReadCache() error {
+	// Get cache file path.
+	cache, err := me.getCacheFile(true)
+	if err != nil {
+		return err
+	}
+
+	// Open cache file.
+	fp, err := os.Open(cache)
+	if err != nil {
+		if err == os.ErrNotExist {
+			return nil
+		} else {
+			return err
+		}
+	}
+	defer fp.Close()
+
+	// Create a buffered reader to enhance read performance.
+	reader := bufio.NewReader(fp)
+
+	for {
+		object := new(FileAttr)
+		err := object.ReadCache(reader)
+
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return err
+		}
+
+		// File path is map key.
+		key := object.Path
+
+		// Convert file path to lower case on Windows.
+		if os.PathSeparator != '/' {
+			key = strings.ToLower(key)
+		}
+
+		me.files[key] = object
+	}
+
+	return nil
+}
+
+func (me *fileScannerImpl) SaveCache() error {
+
 	if !me.dirty {
 		return nil
 	}
 
-	// Reset dirty flag
 	me.dirty = false
 
-	// TO-DO: Save file hashes to disk
-	//        in order to speed up next scan.
+	// Get cache file path.
+	cache, err := me.getCacheFile(false)
+	if err != nil {
+		return err
+	}
+
+	// Create a new cache file.
+	fp, err := os.OpenFile(cache, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+	if err != nil {
+		return err
+	}
+	defer fp.Close()
+
+	// Create a buffered writer to enhance performance.
+	writer := bufio.NewWriter(fp)
+
+	// Write all files with their hashes to disk.
+	for _, object := range me.files {
+		if err := object.SaveCache(writer); err != nil {
+			return err
+		}
+	}
+
+	// If it's a buffered writer, we need to flush data to disk.
+	if err := writer.Flush(); err != nil {
+		return err
+	}
+
 	return nil
 }

@@ -142,6 +142,9 @@ func main_i() int {
 	for _, scanner := range scanners {
 		updater.Log(LOG_INFO, "Scanning %v...", scanner.GetPath())
 
+		// Ignore error because cache is not very important.
+		scanner.ReadCache()
+
 		if err := scanner.Scan(); err != nil {
 			return 1
 		}
@@ -246,7 +249,7 @@ func main_i() int {
 
 	// If a folder has changes, then update its local cache.
 	for _, scanner := range scanners {
-		scanner.Save()
+		scanner.SaveCache()
 	}
 
 	updater.Log(LOG_INFO, "")

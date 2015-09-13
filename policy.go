@@ -2,12 +2,9 @@
 package main
 
 import (
-	"errors"
 	"os"
 	"strings"
 )
-
-var E_INVALID_POLICY = errors.New("Invalid command line policy argument.")
 
 const (
 	// The first file should be removed.
@@ -188,11 +185,11 @@ func NewPolicy(spec string) (Policy, error) {
 	if len(spec) > 0 {
 		for _, name := range strings.Split(strings.ToLower(spec), ",") {
 			if newItem := getPolicyItem(name); newItem == nil {
-				return nil, E_INVALID_POLICY
+				return nil, ErrInvalidPolicy
 			} else {
 				// Check if the new item is duplicated.
 				if count > 0 && policyItemExist(items[0:count], newItem.category) {
-					return nil, E_INVALID_POLICY
+					return nil, ErrInvalidPolicy
 				}
 
 				// Add the new item to the array.
