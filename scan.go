@@ -73,7 +73,7 @@ type FileScanner interface {
 	Remove(path string)
 
 	// Scan files
-	Scan(updater Updater) error
+	Scan() error
 
 	// Save file hashes to speed up next scan.
 	Save() error
@@ -83,6 +83,7 @@ type FileScanner interface {
 type fileScannerImpl struct {
 	path         string               // File path.
 	info         os.FileInfo          // File information.
+	updater      Updater              // Updater interface
 	files        map[string]*FileAttr // All files.
 	totalFiles   int                  // Total files.
 	totalFolders int                  // Total folders.
@@ -93,9 +94,12 @@ type fileScannerImpl struct {
 }
 
 // Create a new file scanner.
-func NewFileScanner(path string, info os.FileInfo) FileScanner {
+func NewFileScanner(path string,
+	info os.FileInfo, updater Updater) FileScanner {
 	return &fileScannerImpl{
-		path: path, info: info,
+		path:       path,
+		info:       info,
+		updater:    updater,
 		files:      make(map[string]*FileAttr),
 		hashEngine: sha256.New(),
 		buffer:     make([]byte, 512*1024),
@@ -135,17 +139,17 @@ func (me *fileScannerImpl) Remove(path string) {
 	me.dirty = true
 }
 
-func (me *fileScannerImpl) Scan(updater Updater) error {
+func (me *fileScannerImpl) Scan() error {
 	// Load file list of the previous scan.
 	me.loadCache()
 
 	// Scan files.
 	if me.info.IsDir() {
-		if err := me.scanFolder(updater); err != nil {
+		if err := me.scanFolder(); err != nil {
 			return err
 		}
 	} else {
-		me.scanFile(me.path, me.info, updater)
+		me.scanFile(me.path, me.info)
 	}
 
 	// Some files do not exist in disk any more,
@@ -156,7 +160,7 @@ func (me *fileScannerImpl) Scan(updater Updater) error {
 }
 
 // Scan folder recursively.
-func (me *fileScannerImpl) scanFolder(updater Updater) error {
+func (me *fileScannerImpl) scanFolder() error {
 
 	var head, tail int = 0, 1
 	folders := make([]string, 0, 64)
@@ -164,7 +168,7 @@ func (me *fileScannerImpl) scanFolder(updater Updater) error {
 
 	for head < tail {
 		// Check if fatal error ever happened.
-		if err := updater.FatalError(); err != nil {
+		if err := me.updater.FatalError(); err != nil {
 			return err
 		}
 
@@ -173,28 +177,28 @@ func (me *fileScannerImpl) scanFolder(updater Updater) error {
 		head++
 
 		if len(path) > len(me.path) {
-			updater.Log(LOG_TRACE, "Scanning %v...", path)
+			me.updater.Log(LOG_TRACE, "Scanning %v...", path)
 		}
 
 		// Open this folder.
 		fp, err := os.Open(path)
 		if err != nil {
-			updater.IncreaseErrors()
-			updater.Log(LOG_ERROR, "Could not open folder %v. Error:%v", path, err)
+			me.updater.IncreaseErrors()
+			me.updater.Log(LOG_ERROR, "Could not open folder %v. Error:%v", path, err)
 			continue
 		}
 
 		for {
 			items, errReadDir := fp.Readdir(512)
 			if errReadDir != nil && errReadDir != io.EOF {
-				updater.IncreaseErrors()
-				updater.Log(LOG_ERROR, "Could not enumerate folder %v. Error:%v", path, errReadDir)
+				me.updater.IncreaseErrors()
+				me.updater.Log(LOG_ERROR, "Could not enumerate folder %v. Error:%v", path, errReadDir)
 				break
 			}
 
 			for i := 0; i < len(items); i++ {
 				// Check if fatal error ever happened.
-				if err := updater.FatalError(); err != nil {
+				if err := me.updater.FatalError(); err != nil {
 					// Close the folder
 					fp.Close()
 					return err
@@ -214,7 +218,7 @@ func (me *fileScannerImpl) scanFolder(updater Updater) error {
 					tail++
 					me.totalFolders++
 				} else if items[i].Mode().IsRegular() {
-					me.scanFile(subPath, items[i], updater)
+					me.scanFile(subPath, items[i])
 				}
 			}
 
@@ -233,7 +237,7 @@ func (me *fileScannerImpl) scanFolder(updater Updater) error {
 
 // Calculate file checksum and put it to the map.
 func (me *fileScannerImpl) scanFile(
-	path string, info os.FileInfo, updater Updater) error {
+	path string, info os.FileInfo) error {
 
 	// File path is map key.
 	var key string = path
@@ -249,7 +253,7 @@ func (me *fileScannerImpl) scanFile(
 	if value, found := me.files[key]; found {
 		if value.Size == info.Size() && value.ModTime == info.ModTime().UnixNano() {
 			// Write trace log message.
-			updater.Log(LOG_TRACE, "%v (%v)", path, &value.SHA256)
+			me.updater.Log(LOG_TRACE, "%v (%v)", path, &value.SHA256)
 
 			// Update file count and total size.
 			me.totalFiles++
@@ -264,8 +268,8 @@ func (me *fileScannerImpl) scanFile(
 	// Open file.
 	fp, err := os.Open(path)
 	if err != nil {
-		updater.IncreaseErrors()
-		updater.Log(LOG_ERROR, "Could not open file %v. Error:%v", path, err)
+		me.updater.IncreaseErrors()
+		me.updater.Log(LOG_ERROR, "Could not open file %v. Error:%v", path, err)
 		return err
 	}
 	defer fp.Close()
@@ -276,14 +280,14 @@ func (me *fileScannerImpl) scanFile(
 	// Read file content
 	for {
 		// Check if fatal error ever happened.
-		if err := updater.FatalError(); err != nil {
+		if err := me.updater.FatalError(); err != nil {
 			return err
 		}
 
 		n, err := fp.Read(me.buffer)
 		if err != nil && err != io.EOF {
-			updater.IncreaseErrors()
-			updater.Log(LOG_ERROR, "Could not read file %v. Error:%v", path, err)
+			me.updater.IncreaseErrors()
+			me.updater.Log(LOG_ERROR, "Could not read file %v. Error:%v", path, err)
 			return err
 		}
 		me.hashEngine.Write(me.buffer[0:n])
@@ -311,7 +315,7 @@ func (me *fileScannerImpl) scanFile(
 	me.totalBytes += info.Size()
 
 	// Write a trace log message.
-	updater.Log(LOG_TRACE, "%v (%v)", path, &newValue.SHA256)
+	me.updater.Log(LOG_TRACE, "%v (%v)", path, &newValue.SHA256)
 
 	return nil
 }

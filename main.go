@@ -135,14 +135,14 @@ func main_i() int {
 			return 1
 		}
 
-		scanners[i] = NewFileScanner(paths[i], info)
+		scanners[i] = NewFileScanner(paths[i], info, updater)
 	}
 
 	// Scan files.
 	for _, scanner := range scanners {
 		updater.Log(LOG_INFO, "Scanning %v...", scanner.GetPath())
 
-		if err := scanner.Scan(updater); err != nil {
+		if err := scanner.Scan(); err != nil {
 			return 1
 		}
 
