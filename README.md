@@ -13,10 +13,10 @@ dedup [-v] [-f] [-l] [-i <TYPE,...>] [-e <TYPE,...>] [-p <POLICY,...>] <path>...
 
 - `-v`: Verbose mode.
 - `-f`: Do not prompt before removing files.
-- `-l`: Show duplicated files, do not delete them.
+- `-l`: List duplicated files only, do not remove them.
 - `-i <TYPE,...>`: Include filters (Scan & remove specified files only).
 - `-e <TYPE,...>`: Exclude filters (Do NOT scan & remove specified files).
-- `-p <POLICY,...>`: When duplication happens, which file will be deleted.
+- `-p <POLICY,...>`: When duplication happens, which file will be removed.
 - `<TYPE,...>`
     - **audio**: Audio files.
     - **office**: Microsoft Office documents.
@@ -37,15 +37,16 @@ dedup [-v] [-f] [-l] [-i <TYPE,...>] [-e <TYPE,...>] [-p <POLICY,...>] <path>...
 - If both include and exclude filters are not set, then
   all duplicated files will be removed.
 - If `-p <POLICY,...>` is not set, then default policy
-  `-p longname,longpath,new` will be used.
+  `-p longname,longpath,new` will be used. Be aware
+  that the order of policy items is very important.
 
 ## Examples
 
 1. `dedup d:\data e:\data`: Remove all duplicated files.
 2. `dedup -f d:\data e:\data`: Do **NOT** prompt before removing duplicated files.
-3. `dedup -l d:\data e:\data`: Show duplicated files, do **NOT** delete them.
+3. `dedup -l d:\data e:\data`: List duplicated files only, do **NOT** remove them.
 4. `dedup -i photo,video d:\data e:\data`: Remove duplicated **photo** and **video**
-   files only, and do **NOT** delete any other duplicated files.
+   files only, and do **NOT** remove any other duplicated files.
 5. `dedup -e office,tarball d:\data e:\data`: Do not remove duplicated
    Microsoft Office documents and tarball files.
 
