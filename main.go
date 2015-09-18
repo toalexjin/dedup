@@ -23,20 +23,25 @@ func usage() {
 	fmt.Println("Copyright 2015 (C) Alex Jin (toalexjin@hotmail.com)")
 	fmt.Println("Remove duplicated files from your system.")
 	fmt.Println()
-	fmt.Println("Usage: dedup [-v] [-f] [-l] [-t <TYPE>,...] [-p <POLICY>,...] <path>...")
+	fmt.Println("Usage: dedup [-v] [-f] [-l] [-i <TYPE>,...] [-e <TYPE>,...] [-p <POLICY>,...] <path>...")
 	fmt.Println()
 	fmt.Println("Options and Arguments:")
 	fmt.Println("    -v:        Verbose mode.")
 	fmt.Println("    -f:        Do not prompt before removing files.")
 	fmt.Println("    -l:        Show duplicated files, do not delete them.")
-	fmt.Println("    -t:        Scan and remove specified type(s) of files.")
-	fmt.Println("    -p:        Policy indicates which files to remove when duplication happens.")
+	fmt.Println("    -i:        Include filters (Scan & remove specified files only).")
+	fmt.Println("    -e:        Exclude filters (Do NOT scan & remove specified files).")
+	fmt.Println("    -p:        Remove which file when duplication happens.")
 	fmt.Println()
-	fmt.Println("-t <TYPE>:")
-	fmt.Println("    photo:     Scan photo (picture) files.")
-	fmt.Println("    video:     Scan video files.")
+	fmt.Println("-i <TYPE>, -e <TYPE>:")
+	fmt.Println("    audio:     Audio files.")
+	fmt.Println("    office:    Microsoft Office documents.")
+	fmt.Println("    photo:     Photo (picture) files.")
+	fmt.Println("    video:     Video files.")
+	fmt.Println("    tarball:   Compressed and ISO files (e.g. gz, iso, rar, zip).")
 	fmt.Println()
-	fmt.Println("    Remark: If \"-t <TYPE>\" is not set, then all files will be scanned.")
+	fmt.Println("    Remark: If both include and exclude filters are not set,")
+	fmt.Println("            then all files will be scanned.")
 	fmt.Println()
 	fmt.Println("-p <POLICY>:")
 	fmt.Println("    longname:  Remove duplicated files with longer file name.")
@@ -83,6 +88,11 @@ func getAbsUniquePaths(paths []string) ([]string, error) {
 		}
 
 		if i == len(uniquePaths) {
+			if _, err := os.Stat(abs); err != nil {
+				fmt.Fprintf(os.Stderr, "%v (%v)", err, path)
+				return nil, err
+			}
+
 			uniquePaths = append(uniquePaths, abs)
 		}
 	}
@@ -180,14 +190,16 @@ func main_i() int {
 	var verbose bool
 	var force bool
 	var list bool
-	var types string
+	var includes string
+	var excludes string
 	var policySpec string
 
 	// Parse command line options.
 	flag.BoolVar(&verbose, "v", false, "Verbose mode.")
 	flag.BoolVar(&force, "f", false, "Do not prompt before removing files.")
 	flag.BoolVar(&list, "l", false, "Show duplicated files, do not delete them.")
-	flag.StringVar(&types, "t", "", "Scan and remove specified type(s) of files.")
+	flag.StringVar(&includes, "i", "", "Include filters.")
+	flag.StringVar(&excludes, "e", "", "Exclude filters.")
 	flag.StringVar(&policySpec, "p", "", "Policy indicates which files to remove.")
 	flag.Parse()
 
@@ -197,15 +209,16 @@ func main_i() int {
 		return 1
 	}
 
-	// Create a policy to determine which file to delete.
+	// Create policy object to determine
+	// which file to delete when duplication happens.
 	policy, err := NewPolicy(policySpec)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 1
 	}
 
-	// Create a filter object.
-	filter, err := NewFilter(types)
+	// Create filter object.
+	filter, err := NewFilter(includes, excludes)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 1
@@ -217,155 +230,130 @@ func main_i() int {
 		return 1
 	}
 
-	// Create a updater callback object.
+	// Create status updater.
 	updater := NewUpdater(verbose)
 
-	// Create file scanner for each path.
-	scanners := make([]FileScanner, 0, len(paths))
+	// Create file scanner.
+	scanner := NewFileScanner(paths, filter, updater)
 
-	for i := 0; i < len(paths); i++ {
-		info, err := os.Stat(paths[i])
-		if err != nil {
-			updater.Log(LOG_ERROR, "%v (%v)", err, paths[i])
-			return 1
-		}
-
-		scanners = append(scanners,
-			NewFileScanner(paths[i], info, filter, updater))
-	}
+	// Ignore error because cache is not very important.
+	scanner.ReadCache()
 
 	// Scan files.
-	for _, scanner := range scanners {
-		updater.Log(LOG_INFO, "Scanning %v...", scanner.GetPath())
-
-		// Ignore error because cache is not very important.
-		scanner.ReadCache()
-
-		if err := scanner.Scan(); err != nil {
-			return 1
-		}
-
-		updater.Log(LOG_INFO, "%v files, %v folders, %.3f MB",
-			scanner.GetTotalFiles(), scanner.GetTotalFolders(),
-			float64(scanner.GetTotalBytes())/(1024*1024))
-		updater.Log(LOG_INFO, "")
+	if err := scanner.Scan(); err != nil {
+		return 1
 	}
 
 	// Result variables
-	var totalFiles int = 0
-	var totalFolders int = 0
-	var totalBytes int64 = 0
 	var deletedFiles int = 0
 	var deletedBytes int64 = 0
 
 	// Map hash-value to file attribute & scanner.
 	mapping := make(map[SHA256Digest]HashItem)
 
-	// Iterate scanner one by one.
-	for _, scanner := range scanners {
-		totalFiles += scanner.GetTotalFiles()
-		totalFolders += scanner.GetTotalFolders()
-		totalBytes += scanner.GetTotalBytes()
+	// Iterate files one by one.
+	for _, file := range scanner.GetFiles() {
+		// We load all files from local cache before scanning files.
+		// At that time all files' "Details" field is nil.
+		// While scanning files, if any of them is not skipped by filter,
+		// then "Details" field would be set to valid value.
+		// Therefore, if "Details" field is nil, then it's not
+		// scanned by this time, we should skip it.
+		if file.Details == nil {
+			continue
+		}
 
-		// Iterate file one by one.
-		for _, file := range scanner.GetFiles() {
-			// Find if the hash already exists in the map.
-			if existing, found := mapping[file.SHA256]; !found {
-				// It is a new hash.
-				mapping[file.SHA256] = HashItem{
-					File: file, Scanner: scanner,
-				}
-			} else {
-				// The hash already exists.
-				var deleted, remain HashItem
-				var goAhead bool = true
+		// Find if the hash already exists in the map.
+		if existing, found := mapping[file.SHA256]; !found {
+			// It is a new hash.
+			mapping[file.SHA256] = HashItem{
+				File: file, Scanner: scanner,
+			}
+		} else {
+			// The hash already exists.
+			var deleted, remain HashItem
+			var goAhead bool = true
 
-				// Check which file to remove
-				switch policy.DeleteWhich(existing.File, file) {
-				case DELETE_WHICH_FIRST:
-					deleted = existing
-					remain.File = file
-					remain.Scanner = scanner
+			// Check which file to remove
+			switch policy.DeleteWhich(existing.File, file) {
+			case DELETE_WHICH_FIRST:
+				deleted = existing
+				remain.File = file
+				remain.Scanner = scanner
 
-				case DELETE_WHICH_EITHER:
-					fallthrough
+			case DELETE_WHICH_EITHER:
+				fallthrough
 
-				case DELETE_WHICH_SECOND:
-					deleted.File = file
-					deleted.Scanner = scanner
-					remain = existing
+			case DELETE_WHICH_SECOND:
+				deleted.File = file
+				deleted.Scanner = scanner
+				remain = existing
 
-				case DELETE_WHICH_NEITHER:
+			case DELETE_WHICH_NEITHER:
+				goAhead = false
+			}
+
+			// Prompt before remove file.
+			if !list && goAhead && !force {
+				switch promptDelete(deleted.File.Path) {
+				case PROMPT_ANSWER_YES:
+
+				case PROMPT_ANSWER_ALL:
+					force = true
+
+				case PROMPT_ANSWER_NO:
 					goAhead = false
+
+				case PROMPT_ANSWER_QUIT:
+					goAhead = false
+
+					// Update local cache.
+					scanner.SaveCache()
+					return 1
 				}
+			}
 
-				// Prompt before remove file.
-				if !list && goAhead && !force {
-					switch promptDelete(deleted.File.Path) {
-					case PROMPT_ANSWER_YES:
-
-					case PROMPT_ANSWER_ALL:
-						force = true
-
-					case PROMPT_ANSWER_NO:
-						goAhead = false
-
-					case PROMPT_ANSWER_QUIT:
-						goAhead = false
-
-						// Update cache files.
-						for i := 0; i < len(scanners); i++ {
-							scanners[i].SaveCache()
-						}
-
-						return 1
+			// Remove the file.
+			if goAhead {
+				// Remove the item and update hash map.
+				if existing.File.Path != deleted.File.Path {
+					mapping[file.SHA256] = HashItem{
+						File: file, Scanner: scanner,
 					}
 				}
 
-				// Remove the file.
-				if goAhead {
-					// Remove the item and update hash map.
-					if existing.File.Path != deleted.File.Path {
-						mapping[file.SHA256] = HashItem{
-							File: file, Scanner: scanner,
-						}
-					}
+				if list {
+					// Show duplicated files, do not delete them.
+					//
+					// Be aware that we do not remove dupliated files
+					// from the map because we want to save their
+					// SHA256 hashes in local cache.
+					updater.Log(LOG_INFO, "%v is duplicated (%v).",
+						deleted.File.Path, remain.File.Path)
 
-					if list {
-						// Show duplicated files, do not delete them.
-						//
-						// Be aware that we do not remove dupliated files
-						// from the map because we want to save their
-						// SHA256 hashes in local cache.
-						updater.Log(LOG_INFO, "%v is duplicated (%v).",
-							deleted.File.Path, remain.File.Path)
+					deletedBytes += deleted.File.Size
+					deletedFiles++
+				} else {
+					// Delete duplicated file from the map.
+					deleted.Scanner.Remove(deleted.File.Path)
 
+					// Delete duplicated file from disk.
+					if err := os.Remove(deleted.File.Path); err != nil {
+						updater.Log(LOG_ERROR, "Could not delete file %v (%v).",
+							deleted.File.Path, err)
+						updater.IncreaseErrors()
+					} else {
+						updater.Log(LOG_INFO, "File %v was deleted.", deleted.File.Path)
 						deletedBytes += deleted.File.Size
 						deletedFiles++
-					} else {
-						// Delete duplicated file from the map.
-						deleted.Scanner.Remove(deleted.File.Path)
-
-						// Delete duplicated file from disk.
-						if err := os.Remove(deleted.File.Path); err != nil {
-							updater.Log(LOG_ERROR, "Could not delete file %v (%v).",
-								deleted.File.Path, err)
-							updater.IncreaseErrors()
-						} else {
-							updater.Log(LOG_INFO, "File %v was deleted.", deleted.File.Path)
-							deletedBytes += deleted.File.Size
-							deletedFiles++
-						}
 					}
 				}
 			}
 		}
 	}
 
-	// If a folder has changes, then update its local cache.
-	for _, scanner := range scanners {
-		scanner.SaveCache()
-	}
+	// Update local cache.
+	scanner.SaveCache()
 
 	if deletedFiles > 0 {
 		updater.Log(LOG_INFO, "")

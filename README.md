@@ -6,7 +6,7 @@ For instance, removing duplicated pictures to free disk space.
 ## Usage
 
 ```
-dedup [-v] [-f] [-l] [-t <TYPE,...>] [-p <POLICY,...>] <path>...
+dedup [-v] [-f] [-l] [-i <TYPE,...>] [-e <TYPE,...>] [-p <POLICY,...>] <path>...
 ```
 
 **Options and Arguments:**
@@ -14,10 +14,16 @@ dedup [-v] [-f] [-l] [-t <TYPE,...>] [-p <POLICY,...>] <path>...
 - `-v`: Verbose mode.
 - `-f`: Do not prompt before removing files.
 - `-l`: Show duplicated files, do not delete them.
-- `-t <TYPE,...>`: Scan and remove specified type(s) of files.
+- `-i <TYPE,...>`: Include filters (Scan & remove specified files only).
+- `-e <TYPE,...>`: Exclude filters (Do NOT scan & remove specified files).
+- `-p <POLICY,...>`: When duplication happens, which file will be deleted.
+- `<TYPE,...>`
+    - **audio**: Audio files.
+    - **office**: Microsoft Office documents.
     - **photo**: Photo (picture) files.
     - **video**: Video files.
-- `-p <POLICY,...>`: When duplication found, decide to delete which file.
+    - **tarball**: Compressed and ISO files (e.g. gz, iso, rar, zip).
+- `<POLICY,...>`
     - **longname**: Remove duplicated files with longer file name.
     - **shortname**: Remove duplicated files with shorter file name.
     - **longpath**: Remove duplicated files with longer full path.
@@ -28,7 +34,8 @@ dedup [-v] [-f] [-l] [-t <TYPE,...>] [-p <POLICY,...>] <path>...
 
 **Remark**:
 
-- If `-t <TYPE,...>` is not set, then all files will be scanned.
+- If both include and exclude filters are not set, then
+  all duplicated files will be removed.
 - If `-p <POLICY,...>` is not set, then default policy
   `-p longname,longpath,new` will be used.
 
@@ -37,8 +44,10 @@ dedup [-v] [-f] [-l] [-t <TYPE,...>] [-p <POLICY,...>] <path>...
 1. `dedup d:\data e:\data`: Remove all duplicated files.
 2. `dedup -f d:\data e:\data`: Do **NOT** prompt before removing duplicated files.
 3. `dedup -l d:\data e:\data`: Show duplicated files, do **NOT** delete them.
-4. `dedup -t photo,video d:\data e:\data`: Remove duplicated **photo** and **video**
-   files only, and do **NOT** delete any other types of duplicated files.
+4. `dedup -i photo,video d:\data e:\data`: Remove duplicated **photo** and **video**
+   files only, and do **NOT** delete any other duplicated files.
+5. `dedup -e office,tarball d:\data e:\data`: Do not remove duplicated
+   Microsoft Office documents and tarball files.
 
 ## Design
 

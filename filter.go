@@ -4,7 +4,6 @@ package main
 import (
 	"os/user"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -13,11 +12,8 @@ type Filter interface {
 	// Get cache directory ($HOME/.dedup).
 	GetCacheDir() string
 
-	// Get filter specification.
-	GetSpec() string
-
-	// Check if a folder or file need to skip.
-	Skip(path string, isDir bool) bool
+	// Check if a folder or file needs to skip.
+	Skip(path, name string, isDir bool) bool
 }
 
 type filterImpl struct {
@@ -25,39 +21,44 @@ type filterImpl struct {
 	cacheDir string
 
 	// Include Extentions.
-	includeExts []string
+	includeExts map[string]bool
 
-	// Filter specification.
-	spec string
+	// Exclude Extentions.
+	excludeExts map[string]bool
 }
 
-var extentionMap = map[string][]string{
-	"photo": {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tiff"},
-	"video": {".avi", ".mp4", ".mpg", ".rm", ".wmv"},
+var extentionMapping = map[string][]string{
+	"audio":   {".mp3"},
+	"office":  {".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"},
+	"photo":   {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tiff"},
+	"video":   {".avi", ".mp4", ".mpg", ".rm", ".wmv"},
+	"tarball": {".7z", ".bz", ".gz", ".iso", ".rar", ".tar.gz", ".tgz", ".zip"},
 }
 
-func parseTypes(types string) ([]string, error) {
-	result := make([]string, 0, 15)
-
+func parseTypes(exts map[string]bool, types string) error {
 	for _, value := range strings.Split(strings.ToLower(types), ",") {
-		if list, ok := extentionMap[value]; ok {
-			for _, str := range list {
-				result = append(result, str)
-			}
-		} else {
-			return nil, ErrInvalidFileTypes
+		list, ok := extentionMapping[value]
+
+		// If it could not be found, then return error.
+		if !ok {
+			return ErrInvalidFilters
+		}
+
+		// Add all extentions to map.
+		for _, str := range list {
+			exts[str] = true
 		}
 	}
 
-	// Sort it in ascending order.
-	sort.Strings(result)
-
-	return result, nil
+	return nil
 }
 
 // Create a new filter object.
-func NewFilter(types string) (Filter, error) {
-	filter := new(filterImpl)
+func NewFilter(includes, excludes string) (Filter, error) {
+	filter := &filterImpl{
+		includeExts: make(map[string]bool),
+		excludeExts: make(map[string]bool),
+	}
 
 	// Get $HOME.
 	if current, err := user.Current(); err != nil {
@@ -67,21 +68,18 @@ func NewFilter(types string) (Filter, error) {
 		filter.cacheDir = filepath.Join(current.HomeDir, ".dedup")
 	}
 
-	// Parse types.
-	if len(types) > 0 {
-		var err error
-		if filter.includeExts, err = parseTypes(types); err != nil {
+	// Include filters.
+	if len(includes) > 0 {
+		if err := parseTypes(filter.includeExts, includes); err != nil {
 			return nil, err
 		}
 	}
 
-	// Generate spec.
-	for _, ext := range filter.includeExts {
-		if len(filter.spec) > 0 {
-			filter.spec += ","
+	// Exclude filters.
+	if len(excludes) > 0 {
+		if err := parseTypes(filter.excludeExts, excludes); err != nil {
+			return nil, err
 		}
-
-		filter.spec += ext
 	}
 
 	return filter, nil
@@ -91,33 +89,42 @@ func (me *filterImpl) GetCacheDir() string {
 	return me.cacheDir
 }
 
-// Get filter specification.
-func (me *filterImpl) GetSpec() string {
-	return me.spec
-}
-
-func (me *filterImpl) Skip(path string, isDir bool) bool {
+func (me *filterImpl) Skip(path, name string, isDir bool) bool {
 	// If it's in cache folder, then skip it.
 	if SameOrIsChild(me.cacheDir, path) {
 		return true
 	}
 
-	// If it's a folder or include extention list
-	// is empty, then do not skip it.
-	if isDir || len(me.includeExts) == 0 {
+	// Include and exclude filters are for files only,
+	// NOT for folders.
+	if isDir {
 		return false
 	}
 
-	// If file extention is in the include list,
-	// then do not skip it.
-	ext := strings.ToLower(filepath.Ext(path))
-
-	// Find the extention in the sorted list.
-	index := sort.SearchStrings(me.includeExts, ext)
-	if index < len(me.includeExts) && me.includeExts[index] == ext {
+	// If both include and exclude filter are empty,
+	// then do NOT skip this path.
+	if len(me.includeExts) == 0 && len(me.excludeExts) == 0 {
 		return false
 	}
 
-	// Otherwise, skip it.
-	return true
+	// Get file extention.
+	ext := strings.ToLower(filepath.Ext(name))
+
+	// If it's included by exclude filters, then skip it.
+	if _, ok := me.excludeExts[ext]; ok {
+		return true
+	}
+
+	// Include filters.
+	if len(me.includeExts) > 0 {
+		if _, ok := me.includeExts[ext]; ok {
+			return false
+		}
+
+		// If include filters have been set, then any files
+		// that are not included by include filters will be skipped.
+		return true
+	}
+
+	return false
 }

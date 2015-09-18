@@ -9,5 +9,5 @@ var (
 	ErrInvalidPolicy        = errors.New("Invalid policy argument (-p <POLICY>,...).")
 	ErrInvalidCacheFile     = errors.New("Invalid cache file format.")
 	ErrRootPathNotPermitted = errors.New("Root path (\"/\") is not permitted.")
-	ErrInvalidFileTypes     = errors.New("Invalid file type argument (-t <TYPE>,...).")
+	ErrInvalidFilters       = errors.New("Invalid include (or exclude) filters.")
 )

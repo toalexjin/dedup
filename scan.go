@@ -136,9 +136,6 @@ func (me *FileAttr) SaveCache(writer *bufio.Writer) error {
 // File scanner interface.
 type FileScanner interface {
 
-	// Get path.
-	GetPath() string
-
 	// Get total files.
 	//
 	// This function should be called after scanning files.
@@ -162,7 +159,7 @@ type FileScanner interface {
 
 	// Remove a file from the map.
 	//
-	// This function is not used to remove file from disk.
+	// This function will not remove file from disk.
 	Remove(path string)
 
 	// Scan files
@@ -177,18 +174,16 @@ type FileScanner interface {
 
 // File scanner implementation.
 type fileScannerImpl struct {
-	path    string      // File path.
-	info    os.FileInfo // File information.
-	filter  Filter      // Filter.
-	updater Updater     // Updater interface
-	cache   string      // Cache file path.
-
 	// All files.
 	//
 	// The key is file full path,
 	// which would be lower case on Windows.
 	files map[string]*FileAttr
 
+	paths        []string  // Source paths to scan
+	filter       Filter    // Filter.
+	updater      Updater   // Updater interface
+	cache        string    // Cache file path.
 	totalFiles   int       // Total files.
 	totalFolders int       // Total folders.
 	totalBytes   int64     // Total size, in bytes.
@@ -198,32 +193,18 @@ type fileScannerImpl struct {
 }
 
 // Create a new file scanner.
-func NewFileScanner(path string, info os.FileInfo,
+func NewFileScanner(paths []string,
 	filter Filter, updater Updater) FileScanner {
 
-	me := &fileScannerImpl{
-		path:       path,
-		info:       info,
+	return &fileScannerImpl{
+		files:      make(map[string]*FileAttr),
+		paths:      paths,
 		filter:     filter,
 		updater:    updater,
-		files:      make(map[string]*FileAttr),
+		cache:      (filter.GetCacheDir() + string(os.PathSeparator) + "global.cache"),
 		hashEngine: sha256.New(),
 		buffer:     make([]byte, 512*1024),
 	}
-
-	// Generate cache file path.
-	me.hashEngine.Reset()
-	me.hashEngine.Write([]byte(GetPathAsKey(me.path)))
-	me.hashEngine.Write([]byte("|Filter:"))
-	me.hashEngine.Write([]byte(me.filter.GetSpec()))
-	name := hex.EncodeToString(me.hashEngine.Sum(nil)) + ".dat"
-	me.cache = AppendPath(me.filter.GetCacheDir(), name)
-
-	return me
-}
-
-func (me *fileScannerImpl) GetPath() string {
-	return me.path
 }
 
 func (me *fileScannerImpl) GetTotalFiles() int {
@@ -251,33 +232,51 @@ func (me *fileScannerImpl) Remove(path string) {
 }
 
 func (me *fileScannerImpl) Scan() error {
-	// Check if the path need to skip.
-	if me.filter.Skip(me.path, me.info.IsDir()) {
-		return nil
-	}
+	for _, path := range me.paths {
+		// Save old numbers.
+		oldTotalFiles := me.totalFiles
+		oldTotalFolders := me.totalFolders
+		oldTotalBytes := me.totalBytes
 
-	// Scan files.
-	if me.info.IsDir() {
-		if err := me.scanFolder(); err != nil {
-			return err
+		// Start to scan this path.
+		me.updater.Log(LOG_INFO, "Scanning %v...", path)
+
+		// Get path attribute.
+		info, err := os.Stat(path)
+		if err != nil {
+			me.updater.Log(LOG_ERROR, "%v (%v)", err, path)
+			me.updater.Log(LOG_INFO, "")
+			continue
 		}
-	} else {
-		me.scanFile(me.path, me.info)
-	}
 
-	// Some files do not exist in disk any more,
-	// let's remove them from the map.
-	me.removeNonExistFiles()
+		// Check if the path needs to skip.
+		if !me.filter.Skip(path, info.Name(), info.IsDir()) {
+			if info.IsDir() {
+				if err := me.scanFolder(path); err != nil {
+					return err
+				}
+			} else {
+				me.scanFile(path, info)
+			}
+		}
+
+		// Print summary for this path.
+		me.updater.Log(LOG_INFO, "%v files, %v folders, %.3f MB",
+			me.totalFiles-oldTotalFiles,
+			me.totalFolders-oldTotalFolders,
+			float64(me.totalBytes-oldTotalBytes)/(1024*1024))
+		me.updater.Log(LOG_INFO, "")
+	}
 
 	return nil
 }
 
-// Scan folder recursively.
-func (me *fileScannerImpl) scanFolder() error {
+// Scan folder and all its sub-folders.
+func (me *fileScannerImpl) scanFolder(path string) error {
 
 	var head, tail int = 0, 1
 	folders := make([]string, 0, 64)
-	folders = append(folders, me.path)
+	folders = append(folders, path)
 
 	for head < tail {
 		// Check if fatal error ever happened.
@@ -286,18 +285,18 @@ func (me *fileScannerImpl) scanFolder() error {
 		}
 
 		// Pop a folder path.
-		path := folders[head]
+		folder := folders[head]
 		head++
 
-		if len(path) > len(me.path) {
-			me.updater.Log(LOG_TRACE, "Scanning %v...", path)
+		if len(folder) > len(path) {
+			me.updater.Log(LOG_TRACE, "Scanning %v...", folder)
 		}
 
 		// Open this folder.
-		fp, err := os.Open(path)
+		fp, err := os.Open(folder)
 		if err != nil {
 			me.updater.IncreaseErrors()
-			me.updater.Log(LOG_ERROR, "Could not open folder %v. Error:%v", path, err)
+			me.updater.Log(LOG_ERROR, "Could not open folder %v. Error:%v", folder, err)
 			continue
 		}
 
@@ -305,7 +304,7 @@ func (me *fileScannerImpl) scanFolder() error {
 			items, errReadDir := fp.Readdir(512)
 			if errReadDir != nil && errReadDir != io.EOF {
 				me.updater.IncreaseErrors()
-				me.updater.Log(LOG_ERROR, "Could not enumerate folder %v. Error:%v", path, errReadDir)
+				me.updater.Log(LOG_ERROR, "Could not enumerate folder %v. Error:%v", folder, errReadDir)
 				break
 			}
 
@@ -317,10 +316,10 @@ func (me *fileScannerImpl) scanFolder() error {
 					return err
 				}
 
-				subPath := AppendPath(path, items[i].Name())
+				subPath := AppendPath(folder, items[i].Name())
 
 				// Check if it needs to skip.
-				if me.filter.Skip(subPath, items[i].IsDir()) {
+				if me.filter.Skip(subPath, items[i].Name(), items[i].IsDir()) {
 					continue
 				}
 
@@ -429,17 +428,6 @@ func (me *fileScannerImpl) scanFile(
 	me.updater.Log(LOG_TRACE, "%v (%v)", path, &newValue.SHA256)
 
 	return nil
-}
-
-// Some files do not exist in disk any more,
-// let's remove them from the map.
-func (me *fileScannerImpl) removeNonExistFiles() {
-	for key, value := range me.files {
-		if value.Details == nil {
-			delete(me.files, key)
-			me.dirty = true
-		}
-	}
 }
 
 func (me *fileScannerImpl) ReadCache() error {
