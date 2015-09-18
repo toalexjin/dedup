@@ -14,7 +14,7 @@ dedup [-v] [-f] [-l] [-t <TYPE,...>] [-p <POLICY,...>] <path>...
 - `-v`: Verbose mode.
 - `-f`: Do not prompt before removing files.
 - `-l`: Show duplicated files, do not delete them.
-- `-t <TYPE,...>: Scan and remove specified type(s) of files.
+- `-t <TYPE,...>`: Scan and remove specified type(s) of files.
     - **photo**: Photo (picture) files.
     - **video**: Video files.
 - `-p <POLICY,...>`: When duplication found, decide to delete which file.
