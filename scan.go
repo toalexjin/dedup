@@ -181,6 +181,7 @@ type fileScannerImpl struct {
 	info    os.FileInfo // File information.
 	filter  Filter      // Filter.
 	updater Updater     // Updater interface
+	cache   string      // Cache file path.
 
 	// All files.
 	//
@@ -199,7 +200,8 @@ type fileScannerImpl struct {
 // Create a new file scanner.
 func NewFileScanner(path string, info os.FileInfo,
 	filter Filter, updater Updater) FileScanner {
-	return &fileScannerImpl{
+
+	me := &fileScannerImpl{
 		path:       path,
 		info:       info,
 		filter:     filter,
@@ -208,6 +210,16 @@ func NewFileScanner(path string, info os.FileInfo,
 		hashEngine: sha256.New(),
 		buffer:     make([]byte, 512*1024),
 	}
+
+	// Generate cache file path.
+	me.hashEngine.Reset()
+	me.hashEngine.Write([]byte(GetPathAsKey(me.path)))
+	me.hashEngine.Write([]byte("|Filter:"))
+	me.hashEngine.Write([]byte(me.filter.GetSpec()))
+	name := hex.EncodeToString(me.hashEngine.Sum(nil)) + ".dat"
+	me.cache = AppendPath(me.filter.GetCacheDir(), name)
+
+	return me
 }
 
 func (me *fileScannerImpl) GetPath() string {
@@ -240,7 +252,7 @@ func (me *fileScannerImpl) Remove(path string) {
 
 func (me *fileScannerImpl) Scan() error {
 	// Check if the path need to skip.
-	if me.filter.Skip(me.path) {
+	if me.filter.Skip(me.path, me.info.IsDir()) {
 		return nil
 	}
 
@@ -307,19 +319,17 @@ func (me *fileScannerImpl) scanFolder() error {
 
 				subPath := AppendPath(path, items[i].Name())
 
-				if items[i].IsDir() {
-					// Check if the sub-folder needs to skip.
-					if me.filter.Skip(subPath) {
-						continue
-					}
+				// Check if it needs to skip.
+				if me.filter.Skip(subPath, items[i].IsDir()) {
+					continue
+				}
 
+				if items[i].IsDir() {
 					// Push the sub-folder path to the end.
 					folders = append(folders, subPath)
 					tail++
 					me.totalFolders++
 				} else if items[i].Mode().IsRegular() {
-					// Currently, the filter is to check folder only,
-					// so we do not check files.
 					me.scanFile(subPath, items[i])
 				}
 			}
@@ -432,23 +442,12 @@ func (me *fileScannerImpl) removeNonExistFiles() {
 	}
 }
 
-func (me *fileScannerImpl) getCacheFile() string {
-	me.hashEngine.Reset()
-	me.hashEngine.Write([]byte(GetPathAsKey(me.path)))
-	name := hex.EncodeToString(me.hashEngine.Sum(nil)) + ".dat"
-
-	return AppendPath(me.filter.GetCacheDir(), name)
-}
-
 func (me *fileScannerImpl) ReadCache() error {
-	// Get cache file path.
-	cache := me.getCacheFile()
-
 	// Print trace log message.
-	me.updater.Log(LOG_TRACE, "Reading cache %v...", cache)
+	me.updater.Log(LOG_TRACE, "Reading cache %v...", me.cache)
 
 	// Open cache file.
-	fp, err := os.Open(cache)
+	fp, err := os.Open(me.cache)
 	if err != nil {
 		if err == os.ErrNotExist {
 			return nil
@@ -494,14 +493,11 @@ func (me *fileScannerImpl) SaveCache() error {
 		}
 	}
 
-	// Get cache file path.
-	cache := me.getCacheFile()
-
 	// Print trace log message.
-	me.updater.Log(LOG_TRACE, "Updating cache %v...", cache)
+	me.updater.Log(LOG_TRACE, "Updating cache %v...", me.cache)
 
 	// Create a new cache file.
-	fp, err := os.OpenFile(cache, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+	fp, err := os.OpenFile(me.cache, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
 		return err
 	}

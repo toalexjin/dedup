@@ -6,7 +6,8 @@ import (
 )
 
 var (
-	ErrInvalidPolicy        = errors.New("Invalid command line policy argument.")
-	ErrInvalidCacheFile     = errors.New("Invalid cache file content.")
+	ErrInvalidPolicy        = errors.New("Invalid policy argument (-p <POLICY>,...).")
+	ErrInvalidCacheFile     = errors.New("Invalid cache file format.")
 	ErrRootPathNotPermitted = errors.New("Root path (\"/\") is not permitted.")
+	ErrInvalidFileTypes     = errors.New("Invalid file type argument (-t <TYPE>,...).")
 )

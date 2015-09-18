@@ -23,15 +23,22 @@ func usage() {
 	fmt.Println("Copyright 2015 (C) Alex Jin (toalexjin@hotmail.com)")
 	fmt.Println("Remove duplicated files from your system.")
 	fmt.Println()
-	fmt.Println("Usage: dedup [-v] [-f] [-t] [-p <policy>,...] <path>...")
+	fmt.Println("Usage: dedup [-v] [-f] [-l] [-t <TYPE>,...] [-p <POLICY>,...] <path>...")
 	fmt.Println()
 	fmt.Println("Options and Arguments:")
 	fmt.Println("    -v:        Verbose mode.")
 	fmt.Println("    -f:        Do not prompt before removing files.")
-	fmt.Println("    -t:        Show duplicated files, do not delete them.")
-	fmt.Println("    -p:        Policy indicates which files to remove.")
+	fmt.Println("    -l:        Show duplicated files, do not delete them.")
+	fmt.Println("    -t:        Scan and remove specified type(s) of files.")
+	fmt.Println("    -p:        Policy indicates which files to remove when duplication happens.")
 	fmt.Println()
-	fmt.Println("<policy>:")
+	fmt.Println("-t <TYPE>:")
+	fmt.Println("    photo:     Scan photo (picture) files.")
+	fmt.Println("    video:     Scan video files.")
+	fmt.Println()
+	fmt.Println("    Remark: If \"-t <TYPE>\" is not set, then all files will be scanned.")
+	fmt.Println()
+	fmt.Println("-p <POLICY>:")
 	fmt.Println("    longname:  Remove duplicated files with longer file name.")
 	fmt.Println("    shortname: Remove duplicated files with shorter file name.")
 	fmt.Println("    longpath:  Remove duplicated files with longer full path.")
@@ -39,7 +46,8 @@ func usage() {
 	fmt.Println("    new:       Remove duplicated files with newer last modification time.")
 	fmt.Println("    old:       Remove duplicated files with older last modification time.")
 	fmt.Println()
-	fmt.Println("Default <policy>: \"longname,longpath,new\"")
+	fmt.Println("    Remark: If \"-p <POLICY>\" is not set, then default policy")
+	fmt.Println("            \"longname,longpath,new\" will be used.")
 	fmt.Println()
 }
 
@@ -88,12 +96,12 @@ func viewFile(file string) error {
 }
 
 var extentions = []string{
-	"bat",
-	"com",
-	"dll",
-	"drv",
-	"exe",
-	"sys",
+	".bat",
+	".com",
+	".dll",
+	".drv",
+	".exe",
+	".sys",
 }
 
 func supportView(ext string) bool {
@@ -171,13 +179,15 @@ func main_i() int {
 
 	var verbose bool
 	var force bool
-	var test bool
+	var list bool
+	var types string
 	var policySpec string
 
 	// Parse command line options.
 	flag.BoolVar(&verbose, "v", false, "Verbose mode.")
 	flag.BoolVar(&force, "f", false, "Do not prompt before removing files.")
-	flag.BoolVar(&test, "t", false, "Show duplicated files, do not delete them.")
+	flag.BoolVar(&list, "l", false, "Show duplicated files, do not delete them.")
+	flag.StringVar(&types, "t", "", "Scan and remove specified type(s) of files.")
 	flag.StringVar(&policySpec, "p", "", "Policy indicates which files to remove.")
 	flag.Parse()
 
@@ -194,6 +204,13 @@ func main_i() int {
 		return 1
 	}
 
+	// Create a filter object.
+	filter, err := NewFilter(types)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		return 1
+	}
+
 	// Convert input paths to absolute.
 	paths, err := getAbsUniquePaths(flag.Args())
 	if err != nil {
@@ -202,9 +219,6 @@ func main_i() int {
 
 	// Create a updater callback object.
 	updater := NewUpdater(verbose)
-
-	// Create a filter object.
-	filter := NewFilter()
 
 	// Create file scanner for each path.
 	scanners := make([]FileScanner, 0, len(paths))
@@ -286,7 +300,7 @@ func main_i() int {
 				}
 
 				// Prompt before remove file.
-				if !test && goAhead && !force {
+				if !list && goAhead && !force {
 					switch promptDelete(deleted.File.Path) {
 					case PROMPT_ANSWER_YES:
 
@@ -317,7 +331,7 @@ func main_i() int {
 						}
 					}
 
-					if test {
+					if list {
 						// Show duplicated files, do not delete them.
 						//
 						// Be aware that we do not remove dupliated files
@@ -359,7 +373,7 @@ func main_i() int {
 
 	updater.Log(LOG_INFO, "<Summary>")
 
-	if test {
+	if list {
 		updater.Log(LOG_INFO, "Duplicated Files: %v", deletedFiles)
 		updater.Log(LOG_INFO, "Duplicated Size:  %.3f MB", float64(deletedBytes)/(1024*1024))
 	} else {

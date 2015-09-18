@@ -6,15 +6,18 @@ For instance, removing duplicated pictures to free disk space.
 ## Usage
 
 ```
-dedup [-v] [-f] [-t] [-p <policy,...>] <path>...
+dedup [-v] [-f] [-l] [-t <TYPE,...>] [-p <POLICY,...>] <path>...
 ```
 
 **Options and Arguments:**
 
 - `-v`: Verbose mode.
 - `-f`: Do not prompt before removing files.
-- `-t`: Show duplicated files, do not delete them.
-- `-p <policy,...>`:
+- `-l`: Show duplicated files, do not delete them.
+- `-t <TYPE,...>: Scan and remove specified type(s) of files.
+    - **photo**: Photo (picture) files.
+    - **video**: Video files.
+- `-p <POLICY,...>`: When duplication found, decide to delete which file.
     - **longname**: Remove duplicated files with longer file name.
     - **shortname**: Remove duplicated files with shorter file name.
     - **longpath**: Remove duplicated files with longer full path.
@@ -25,14 +28,17 @@ dedup [-v] [-f] [-t] [-p <policy,...>] <path>...
 
 **Remark**:
 
-- If option `-p <policy,...>` is not specified, then default policy
+- If `-t <TYPE,...> is not set, then all files will be scanned.
+- If `-p <POLICY,...>` is not set, then default policy
   `-p longname,longpath,new` will be used.
 
 ## Examples
 
-1. `dedup d:\picture e:\picture`: Remove duplicated files.
-2. `dedup -f d:\picture e:\picture`: Do not prompt before removing duplicated files.
-3. `dedup -t d:\picture e:\picture`: Show duplicated files, do not delete them.
+1. `dedup d:\data e:\data`: Remove all duplicated files.
+2. `dedup -f d:\data e:\data`: Do **NOT** prompt before removing duplicated files.
+3. `dedup -l d:\data e:\data`: Show duplicated files, do **NOT** delete them.
+4. `dedup -t photo,video d:\data e:\data`: Remove duplicated **photo** and **video**
+   files only, and do **NOT** delete any other types of duplicated files.
 
 ## Design
 
