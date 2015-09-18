@@ -27,7 +27,7 @@ func usage() {
 	fmt.Println()
 	fmt.Println("Options and Arguments:")
 	fmt.Println("    -v:        Verbose mode.")
-	fmt.Println("    -f:        Do not prompt before removing files.")
+	fmt.Println("    -f:        Do not prompt before removing each duplicated file.")
 	fmt.Println("    -l:        List duplicated files only, do not remove them.")
 	fmt.Println("    -i:        Include filters (Scan & remove specified files only).")
 	fmt.Println("    -e:        Exclude filters (Do NOT scan & remove specified files).")
@@ -343,7 +343,7 @@ func main_i() int {
 							deleted.File.Path, err)
 						updater.IncreaseErrors()
 					} else {
-						updater.Log(LOG_INFO, "File %v was deleted.", deleted.File.Path)
+						updater.Log(LOG_INFO, "%v was deleted.", deleted.File.Path)
 						deletedBytes += deleted.File.Size
 						deletedFiles++
 					}
@@ -360,6 +360,9 @@ func main_i() int {
 	}
 
 	updater.Log(LOG_INFO, "<Summary>")
+	updater.Log(LOG_INFO, "Total Files:      %v", scanner.GetTotalFiles())
+	updater.Log(LOG_INFO, "Total Folders:    %v", scanner.GetTotalFolders())
+	updater.Log(LOG_INFO, "Total Size:       %.3f MB", float64(scanner.GetTotalBytes())/(1024*1024))
 
 	if list {
 		updater.Log(LOG_INFO, "Duplicated Files: %v", deletedFiles)

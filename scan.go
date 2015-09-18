@@ -460,7 +460,6 @@ func (me *fileScannerImpl) ReadCache() error {
 			return err
 		}
 
-		me.updater.Log(LOG_TRACE, "Cache info: %v", object)
 		me.files[GetPathAsKey(object.Path)] = object
 	}
 

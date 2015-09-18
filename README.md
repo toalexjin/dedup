@@ -12,7 +12,7 @@ dedup [-v] [-f] [-l] [-i <TYPE,...>] [-e <TYPE,...>] [-p <POLICY,...>] <path>...
 **Options and Arguments:**
 
 - `-v`: Verbose mode.
-- `-f`: Do not prompt before removing files.
+- `-f`: Do not prompt before removing each duplicated file.
 - `-l`: List duplicated files only, do not remove them.
 - `-i <TYPE,...>`: Include filters (Scan & remove specified files only).
 - `-e <TYPE,...>`: Exclude filters (Do NOT scan & remove specified files).
@@ -43,7 +43,7 @@ dedup [-v] [-f] [-l] [-i <TYPE,...>] [-e <TYPE,...>] [-p <POLICY,...>] <path>...
 ## Examples
 
 1. `dedup d:\data e:\data`: Remove all duplicated files.
-2. `dedup -f d:\data e:\data`: Do **NOT** prompt before removing duplicated files.
+2. `dedup -f d:\data e:\data`: Do **NOT** prompt before removing each duplicated file.
 3. `dedup -l d:\data e:\data`: List duplicated files only, do **NOT** remove them.
 4. `dedup -i photo,video d:\data e:\data`: Remove duplicated **photo** and **video**
    files only, and do **NOT** remove any other duplicated files.
