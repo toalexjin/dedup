@@ -66,9 +66,9 @@ func getAbsUniquePaths(paths []string) ([]string, error) {
 		// of a path in the array.
 		var i int
 		for i = 0; i < len(uniquePaths); i++ {
-			if SameOrInFolder(uniquePaths[i], abs) {
+			if SameOrIsChild(uniquePaths[i], abs) {
 				break
-			} else if SameOrInFolder(abs, uniquePaths[i]) {
+			} else if SameOrIsChild(abs, uniquePaths[i]) {
 				uniquePaths[i] = abs
 				break
 			}
@@ -87,16 +87,36 @@ func viewFile(file string) error {
 	return cmd.Start()
 }
 
+var extentions = []string{
+	"bat",
+	"com",
+	"dll",
+	"drv",
+	"exe",
+	"sys",
+}
+
+func supportView(ext string) bool {
+	lower := strings.ToLower(ext)
+
+	for i := 0; i < len(extentions); i++ {
+		if extentions[i] == lower {
+			return false
+		}
+	}
+
+	return true
+}
+
 // Return value is PROMPT_ANSWER_???
 func promptDelete(file string) int {
 
 	// Support "view" or not.
-	supportView := false
+	viewFlag := false
 
 	if os.PathSeparator != '/' {
-		ext := strings.ToLower(filepath.Ext(file))
-		if ext != "exe" && ext != "com" && ext != "bat" {
-			supportView = true
+		if supportView(filepath.Ext(file)) {
+			viewFlag = true
 		}
 	}
 
@@ -104,7 +124,7 @@ func promptDelete(file string) int {
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
-		if supportView {
+		if viewFlag {
 			fmt.Printf("Delete %v? (Yes,All,No,View,Quit):", file)
 		} else {
 			fmt.Printf("Delete %v? (Yes,All,No,Quit):", file)
@@ -123,7 +143,9 @@ func promptDelete(file string) int {
 				return PROMPT_ANSWER_ALL
 
 			case "v", "view":
-				viewFile(file)
+				if viewFlag {
+					viewFile(file)
+				}
 
 			case "q", "quit":
 				return PROMPT_ANSWER_QUIT
@@ -185,7 +207,7 @@ func main_i() int {
 	filter := NewFilter()
 
 	// Create file scanner for each path.
-	scanners := make([]FileScanner, len(paths))
+	scanners := make([]FileScanner, 0, len(paths))
 
 	for i := 0; i < len(paths); i++ {
 		info, err := os.Stat(paths[i])
@@ -194,7 +216,8 @@ func main_i() int {
 			return 1
 		}
 
-		scanners[i] = NewFileScanner(paths[i], info, filter, updater)
+		scanners = append(scanners,
+			NewFileScanner(paths[i], info, filter, updater))
 	}
 
 	// Scan files.
@@ -275,6 +298,12 @@ func main_i() int {
 
 					case PROMPT_ANSWER_QUIT:
 						goAhead = false
+
+						// Update cache files.
+						for i := 0; i < len(scanners); i++ {
+							scanners[i].SaveCache()
+						}
+
 						return 1
 					}
 				}

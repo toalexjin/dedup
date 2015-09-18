@@ -40,5 +40,5 @@ func (me *filterImpl) GetCacheDir() string {
 }
 
 func (me *filterImpl) Skip(path string) bool {
-	return SameOrInFolder(me.cacheDir, path)
+	return SameOrIsChild(me.cacheDir, path)
 }

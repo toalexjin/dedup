@@ -15,7 +15,7 @@ func SamePath(path1, path2 string) bool {
 	}
 }
 
-func SameOrInFolder(parent, child string) bool {
+func SameOrIsChild(parent, child string) bool {
 	// Parent path should not be longer than child.
 	if len(parent) > len(child) {
 		return false
