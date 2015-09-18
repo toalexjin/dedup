@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -50,32 +51,65 @@ func getAbsUniquePaths(paths []string) ([]string, error) {
 	uniquePaths := make([]string, 0, len(paths))
 
 	for _, path := range paths {
+		// First, convert to absolute path.
+		abs, err := GetAbsPath(path)
+		if len(abs) == 0 && err == nil {
+			err = ErrRootPathNotPermitted
+		}
 
-		absPath, err := filepath.Abs(path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Invalid argument %v (%v)\n", path, err)
 			return nil, err
 		}
 
-		absPath = filepath.Clean(absPath)
-		uniquePaths = append(uniquePaths, absPath)
+		// Second, check if it's parent (or child) folder
+		// of a path in the array.
+		var i int
+		for i = 0; i < len(uniquePaths); i++ {
+			if SameOrInFolder(uniquePaths[i], abs) {
+				break
+			} else if SameOrInFolder(abs, uniquePaths[i]) {
+				uniquePaths[i] = abs
+				break
+			}
+		}
+
+		if i == len(uniquePaths) {
+			uniquePaths = append(uniquePaths, abs)
+		}
 	}
 
-	// TO-DO.
-	//
-	// Remove duplicated paths (sub-paths) from the array.
-
 	return uniquePaths, nil
+}
+
+func viewFile(file string) error {
+	cmd := exec.Command("explorer.exe", file)
+	return cmd.Start()
 }
 
 // Return value is PROMPT_ANSWER_???
 func promptDelete(file string) int {
 
+	// Support "view" or not.
+	supportView := false
+
+	if os.PathSeparator != '/' {
+		ext := strings.ToLower(filepath.Ext(file))
+		if ext != "exe" && ext != "com" && ext != "bat" {
+			supportView = true
+		}
+	}
+
 	// Create a buffered reader.
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
-		fmt.Printf("Delete %v? Yes,All,No,Quit: ", file)
+		if supportView {
+			fmt.Printf("Delete %v? (Yes,All,No,View,Quit):", file)
+		} else {
+			fmt.Printf("Delete %v? (Yes,All,No,Quit):", file)
+		}
+
 		if line, _, err := reader.ReadLine(); err == nil {
 
 			switch strings.ToLower(string(line)) {
@@ -88,8 +122,16 @@ func promptDelete(file string) int {
 			case "a", "all":
 				return PROMPT_ANSWER_ALL
 
+			case "v", "view":
+				viewFile(file)
+
 			case "q", "quit":
 				return PROMPT_ANSWER_QUIT
+
+			default:
+				if len(line) > 0 {
+					fmt.Fprintf(os.Stderr, "Invalid Command: %v\n\n", string(line))
+				}
 			}
 		}
 	}
@@ -139,6 +181,9 @@ func main_i() int {
 	// Create a updater callback object.
 	updater := NewUpdater(verbose)
 
+	// Create a filter object.
+	filter := NewFilter()
+
 	// Create file scanner for each path.
 	scanners := make([]FileScanner, len(paths))
 
@@ -149,7 +194,7 @@ func main_i() int {
 			return 1
 		}
 
-		scanners[i] = NewFileScanner(paths[i], info, updater)
+		scanners[i] = NewFileScanner(paths[i], info, filter, updater)
 	}
 
 	// Scan files.

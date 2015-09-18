@@ -77,14 +77,8 @@ func (me *policyImpl) DeleteWhich(first, second *FileAttr) int {
 	}
 
 	// Check if the two paths are identical.
-	if os.PathSeparator == '/' {
-		if first.Path == second.Path {
-			return DELETE_WHICH_NEITHER
-		}
-	} else {
-		if strings.EqualFold(first.Path, second.Path) {
-			return DELETE_WHICH_NEITHER
-		}
+	if SamePath(first.Path, second.Path) {
+		return DELETE_WHICH_NEITHER
 	}
 
 	// If a folder is symbolic link, then different
@@ -154,11 +148,6 @@ func (me *policyImpl) DeleteWhich(first, second *FileAttr) int {
 	return DELETE_WHICH_EITHER
 }
 
-// Get policy item based on name.
-func getPolicyItem(name string) *policyItem {
-	return policyItemMapping[name]
-}
-
 // Check if a policy item exists in an array.
 func policyItemExist(items []*policyItem, category int) bool {
 	for _, item := range items {
@@ -180,9 +169,7 @@ func NewPolicy(spec string) (Policy, error) {
 	// Parse user spec.
 	if len(spec) > 0 {
 		for _, name := range strings.Split(strings.ToLower(spec), ",") {
-			if newItem := getPolicyItem(name); newItem == nil {
-				return nil, ErrInvalidPolicy
-			} else {
+			if newItem, ok := policyItemMapping[name]; ok {
 				// Check if the new item is duplicated.
 				if count > 0 && policyItemExist(items[0:count], newItem.category) {
 					return nil, ErrInvalidPolicy
@@ -191,6 +178,8 @@ func NewPolicy(spec string) (Policy, error) {
 				// Add the new item to the array.
 				items[count] = newItem
 				count++
+			} else {
+				return nil, ErrInvalidPolicy
 			}
 		}
 	}

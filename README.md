@@ -28,6 +28,12 @@ dedup [-v] [-f] [-t] [-p <policy,...>] <path>...
 - If option `-p <policy,...>` is not specified, then default policy
   `-p longname,longpath,new` will be used.
 
+## Examples
+
+1. `dedup d:\picture e:\picture`: Remove duplicated files.
+2. `dedup -f d:\picture e:\picture`: Do not prompt before removing duplicated files.
+3. `dedup -t d:\picture e:\picture`: Show duplicated files, do not delete them.
+
 ## Design
 
 The program scans all files of specified folders, calculates SHA256 hash

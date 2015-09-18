@@ -9,7 +9,6 @@ import (
 	"hash"
 	"io"
 	"os"
-	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -71,6 +70,7 @@ func (me *FileAttr) ReadCache(reader *bufio.Reader) error {
 		}
 	}
 
+	// Start to parse the line.
 	fields := strings.Split(str, "|")
 	if len(fields) != 4 {
 		return ErrInvalidCacheFile
@@ -84,16 +84,15 @@ func (me *FileAttr) ReadCache(reader *bufio.Reader) error {
 	me.Path = fields[0]
 
 	// Name.
-	index := strings.LastIndexByte(me.Path, os.PathSeparator)
-	if index == -1 || index == (len(me.Path)-1) {
+	if name, ok := GetBaseName(me.Path); ok {
+		me.Name = name
+	} else {
 		return ErrInvalidCacheFile
 	}
-	pathBytes := []byte(me.Path)
-	me.Name = string(pathBytes[index+1:])
 
 	// Mod time.
 	if number, err := strconv.ParseInt(fields[1], 10, 64); err != nil {
-		return err
+		return ErrInvalidCacheFile
 	} else if number < 0 {
 		return ErrInvalidCacheFile
 	} else {
@@ -102,7 +101,7 @@ func (me *FileAttr) ReadCache(reader *bufio.Reader) error {
 
 	// Size.
 	if number, err := strconv.ParseInt(fields[2], 10, 64); err != nil {
-		return err
+		return ErrInvalidCacheFile
 	} else if number < 0 {
 		return ErrInvalidCacheFile
 	} else {
@@ -111,7 +110,7 @@ func (me *FileAttr) ReadCache(reader *bufio.Reader) error {
 
 	// SHA256 Hash.
 	if digest, err := hex.DecodeString(fields[3]); err != nil {
-		return err
+		return ErrInvalidCacheFile
 	} else if len(digest) != sha256.Size {
 		return ErrInvalidCacheFile
 	} else {
@@ -155,10 +154,10 @@ type FileScanner interface {
 	// This function should be called after scanning files.
 	GetTotalBytes() int64
 
-	// Get all files
+	// Get all files.
 	//
-	// The map key is file full path,
-	// which might be lower case on Windows platform.
+	// The key is file full path,
+	// which would be lower case on Windows.
 	GetFiles() map[string]*FileAttr
 
 	// Remove a file from the map.
@@ -178,24 +177,32 @@ type FileScanner interface {
 
 // File scanner implementation.
 type fileScannerImpl struct {
-	path         string               // File path.
-	info         os.FileInfo          // File information.
-	updater      Updater              // Updater interface
-	files        map[string]*FileAttr // All files.
-	totalFiles   int                  // Total files.
-	totalFolders int                  // Total folders.
-	totalBytes   int64                // Total size, in bytes.
-	hashEngine   hash.Hash            // SHA256 hash engine.
-	buffer       []byte               // Buffer for reading file content.
-	dirty        bool                 // Indicates if any file has been removed.
+	path    string      // File path.
+	info    os.FileInfo // File information.
+	filter  Filter      // Filter.
+	updater Updater     // Updater interface
+
+	// All files.
+	//
+	// The key is file full path,
+	// which would be lower case on Windows.
+	files map[string]*FileAttr
+
+	totalFiles   int       // Total files.
+	totalFolders int       // Total folders.
+	totalBytes   int64     // Total size, in bytes.
+	hashEngine   hash.Hash // SHA256 hash engine.
+	buffer       []byte    // Buffer for reading file content.
+	dirty        bool      // Indicates if cache file needs to update.
 }
 
 // Create a new file scanner.
-func NewFileScanner(path string,
-	info os.FileInfo, updater Updater) FileScanner {
+func NewFileScanner(path string, info os.FileInfo,
+	filter Filter, updater Updater) FileScanner {
 	return &fileScannerImpl{
 		path:       path,
 		info:       info,
+		filter:     filter,
 		updater:    updater,
 		files:      make(map[string]*FileAttr),
 		hashEngine: sha256.New(),
@@ -224,15 +231,7 @@ func (me *fileScannerImpl) GetFiles() map[string]*FileAttr {
 }
 
 func (me *fileScannerImpl) Remove(path string) {
-	// File path is the key.
-	var key string = path
-
-	// Convert file path to lower case on Windows.
-	if os.PathSeparator != '/' {
-		key = strings.ToLower(key)
-	}
-
-	delete(me.files, key)
+	delete(me.files, GetPathAsKey(path))
 
 	// A file was removed from the map,
 	// set dirty flag to true.
@@ -240,6 +239,11 @@ func (me *fileScannerImpl) Remove(path string) {
 }
 
 func (me *fileScannerImpl) Scan() error {
+	// Check if the path need to skip.
+	if me.filter.Skip(me.path) {
+		return nil
+	}
+
 	// Scan files.
 	if me.info.IsDir() {
 		if err := me.scanFolder(); err != nil {
@@ -301,20 +305,21 @@ func (me *fileScannerImpl) scanFolder() error {
 					return err
 				}
 
-				var subPath string
-
-				if len(path) > 0 && path[len(path)-1] == os.PathSeparator {
-					subPath = path + items[i].Name()
-				} else {
-					subPath = path + string(os.PathSeparator) + items[i].Name()
-				}
+				subPath := AppendPath(path, items[i].Name())
 
 				if items[i].IsDir() {
+					// Check if the sub-folder needs to skip.
+					if me.filter.Skip(subPath) {
+						continue
+					}
+
 					// Push the sub-folder path to the end.
 					folders = append(folders, subPath)
 					tail++
 					me.totalFolders++
 				} else if items[i].Mode().IsRegular() {
+					// Currently, the filter is to check folder only,
+					// so we do not check files.
 					me.scanFile(subPath, items[i])
 				}
 			}
@@ -337,12 +342,7 @@ func (me *fileScannerImpl) scanFile(
 	path string, info os.FileInfo) error {
 
 	// File path is map key.
-	key := path
-
-	// Convert file path to lower case on Windows.
-	if os.PathSeparator != '/' {
-		key = strings.ToLower(key)
-	}
+	key := GetPathAsKey(path)
 
 	// If the file already exists in the map,
 	// and file size & last modification time are the same,
@@ -432,46 +432,17 @@ func (me *fileScannerImpl) removeNonExistFiles() {
 	}
 }
 
-func (me *fileScannerImpl) getCacheFile(readonly bool) (string, error) {
-
-	// Get user home directory.
-	current, err := user.Current()
-	if err != nil {
-		return "", err
-	}
-
-	// Get the directory where cache files are located.
-	dir := filepath.Join(current.HomeDir, ".dedup")
-
-	// Create the directory if it does not exist.
-	if !readonly {
-		if _, err := os.Stat(dir); err != nil {
-			if err := os.Mkdir(dir, os.ModePerm); err != nil {
-				return "", err
-			}
-		}
-	}
-
-	key := me.path
-	if os.PathSeparator != '/' {
-		key = strings.ToLower(key)
-	}
-
+func (me *fileScannerImpl) getCacheFile() string {
 	me.hashEngine.Reset()
-	me.hashEngine.Write([]byte(key))
+	me.hashEngine.Write([]byte(GetPathAsKey(me.path)))
 	name := hex.EncodeToString(me.hashEngine.Sum(nil)) + ".dat"
 
-	path := dir + string(os.PathSeparator) + name
-
-	return path, nil
+	return AppendPath(me.filter.GetCacheDir(), name)
 }
 
 func (me *fileScannerImpl) ReadCache() error {
 	// Get cache file path.
-	cache, err := me.getCacheFile(true)
-	if err != nil {
-		return err
-	}
+	cache := me.getCacheFile()
 
 	// Print trace log message.
 	me.updater.Log(LOG_TRACE, "Reading cache %v...", cache)
@@ -503,34 +474,28 @@ func (me *fileScannerImpl) ReadCache() error {
 		}
 
 		me.updater.Log(LOG_TRACE, "Cache info: %v", object)
-
-		// File path is map key.
-		key := object.Path
-
-		// Convert file path to lower case on Windows.
-		if os.PathSeparator != '/' {
-			key = strings.ToLower(key)
-		}
-
-		me.files[key] = object
+		me.files[GetPathAsKey(object.Path)] = object
 	}
 
 	return nil
 }
 
 func (me *fileScannerImpl) SaveCache() error {
-
 	if !me.dirty {
 		return nil
 	}
 
 	me.dirty = false
 
-	// Get cache file path.
-	cache, err := me.getCacheFile(false)
-	if err != nil {
-		return err
+	// Create cache folder if it does not exist.
+	if _, err := os.Stat(me.filter.GetCacheDir()); err != nil {
+		if err := os.Mkdir(me.filter.GetCacheDir(), os.ModePerm); err != nil {
+			return err
+		}
 	}
+
+	// Get cache file path.
+	cache := me.getCacheFile()
 
 	// Print trace log message.
 	me.updater.Log(LOG_TRACE, "Updating cache %v...", cache)
