@@ -28,7 +28,7 @@ dedup [-v] [-f] [-l] [-t <TYPE,...>] [-p <POLICY,...>] <path>...
 
 **Remark**:
 
-- If `-t <TYPE,...> is not set, then all files will be scanned.
+- If `-t <TYPE,...>` is not set, then all files will be scanned.
 - If `-p <POLICY,...>` is not set, then default policy
   `-p longname,longpath,new` will be used.
 
