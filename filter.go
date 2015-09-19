@@ -28,11 +28,44 @@ type filterImpl struct {
 }
 
 var extentionMapping = map[string][]string{
-	"audio":   {".mp3"},
-	"office":  {".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"},
-	"photo":   {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".tiff"},
-	"video":   {".avi", ".mp4", ".mpg", ".rm", ".wmv"},
-	"tarball": {".7z", ".bz", ".gz", ".iso", ".rar", ".tar.gz", ".tgz", ".zip"},
+	"audio": {".aac", ".ac3", ".amr", ".ape", ".cda",
+		".dts", ".flac", ".m1a", ".m2a", ".m4a",
+		".mka", ".mp2", ".mp3", ".mpa", ".ra",
+		".tta", ".wav", ".wma", ".wv", ".mid"},
+
+	"office": {".doc", ".dot", ".docx", ".docm", ".dotx", ".dotm", ".docb",
+		".xls", ".xlt", ".xlm", ".xlsx", ".xlsm", ".xltx", ".xltm",
+		".ppt", ".pot", ".pps", ".pptx", ".pptm", ".potx", ".potm",
+		".ppam", ".ppsx", ".ppsm", ".sldx", ".sldm",
+		".mdb", ".accdb", ".accde", ".accdt", ".accdr"},
+
+	"photo": {".bmp", ".emf", ".gif", ".ico", ".jpeg",
+		".jpg", ".png", ".psd", ".svg", ".tiff", ".wmf"},
+
+	"video": {".asf", ".avi", ".mov", ".mp4", ".mpg",
+		".rm", ".rmvb", ".vob", ".wmv"},
+
+	"tarball": {".7z", ".ace", ".ar", ".arc", ".ari",
+		".arj", ".bz", ".bz2", ".bzip2", ".cab",
+		".gho", ".gz", ".gzi", ".gzip", ".iso",
+		".rar", ".tar", ".tar.gz", ".tgz", ".z",
+		".zip", ".zipx", ".zz"},
+}
+
+func SupportView(ext string) bool {
+	for key, list := range extentionMapping {
+		if key != "audio" && key != "office" && key != "photo" && key != "video" {
+			continue
+		}
+
+		for _, value := range list {
+			if strings.EqualFold(value, ext) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func parseTypes(types string, exts map[string]bool) error {

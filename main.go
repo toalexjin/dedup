@@ -114,18 +114,6 @@ var extentions = []string{
 	".sys",
 }
 
-func supportView(ext string) bool {
-	lower := strings.ToLower(ext)
-
-	for i := 0; i < len(extentions); i++ {
-		if extentions[i] == lower {
-			return false
-		}
-	}
-
-	return true
-}
-
 // Return value is PROMPT_ANSWER_???
 func promptDelete(file string) int {
 
@@ -133,7 +121,7 @@ func promptDelete(file string) int {
 	viewFlag := false
 
 	if os.PathSeparator != '/' {
-		if supportView(filepath.Ext(file)) {
+		if SupportView(filepath.Ext(file)) {
 			viewFlag = true
 		}
 	}
