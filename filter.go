@@ -35,7 +35,7 @@ var extentionMapping = map[string][]string{
 	"tarball": {".7z", ".bz", ".gz", ".iso", ".rar", ".tar.gz", ".tgz", ".zip"},
 }
 
-func parseTypes(exts map[string]bool, types string) error {
+func parseTypes(types string, exts map[string]bool) error {
 	for _, value := range strings.Split(strings.ToLower(types), ",") {
 		list, ok := extentionMapping[value]
 
@@ -70,14 +70,14 @@ func NewFilter(includes, excludes string) (Filter, error) {
 
 	// Include filters.
 	if len(includes) > 0 {
-		if err := parseTypes(filter.includeExts, includes); err != nil {
+		if err := parseTypes(includes, filter.includeExts); err != nil {
 			return nil, err
 		}
 	}
 
 	// Exclude filters.
 	if len(excludes) > 0 {
-		if err := parseTypes(filter.excludeExts, excludes); err != nil {
+		if err := parseTypes(excludes, filter.excludeExts); err != nil {
 			return nil, err
 		}
 	}

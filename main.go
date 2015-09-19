@@ -177,14 +177,6 @@ func promptDelete(file string) int {
 	}
 }
 
-// Map SHA256 hash to file.
-//
-// map[SHA256]HashItem
-type HashItem struct {
-	File    *FileAttr   // File attributes.
-	Scanner FileScanner // Belongs to which file scanner
-}
-
 func main_i() int {
 
 	var verbose bool
@@ -248,8 +240,8 @@ func main_i() int {
 	var deletedFiles int = 0
 	var deletedBytes int64 = 0
 
-	// Map hash-value to file attribute & scanner.
-	mapping := make(map[SHA256Digest]HashItem)
+	// Map SHA256 hash to file attribute pointer.
+	mapping := make(map[SHA256Digest]*FileAttr)
 
 	// Iterate files one by one.
 	for _, file := range scanner.GetFiles() {
@@ -266,27 +258,24 @@ func main_i() int {
 		// Find if the hash already exists in the map.
 		if existing, found := mapping[file.SHA256]; !found {
 			// It is a new hash.
-			mapping[file.SHA256] = HashItem{
-				File: file, Scanner: scanner,
-			}
+			mapping[file.SHA256] = file
 		} else {
 			// The hash already exists.
-			var deleted, remain HashItem
+			var deleted *FileAttr = nil
+			var remain *FileAttr = nil
 			var goAhead bool = true
 
 			// Check which file to remove
-			switch policy.DeleteWhich(existing.File, file) {
+			switch policy.DeleteWhich(existing, file) {
 			case DELETE_WHICH_FIRST:
 				deleted = existing
-				remain.File = file
-				remain.Scanner = scanner
+				remain = file
 
 			case DELETE_WHICH_EITHER:
 				fallthrough
 
 			case DELETE_WHICH_SECOND:
-				deleted.File = file
-				deleted.Scanner = scanner
+				deleted = file
 				remain = existing
 
 			case DELETE_WHICH_NEITHER:
@@ -295,7 +284,7 @@ func main_i() int {
 
 			// Prompt before remove file.
 			if !list && goAhead && !force {
-				switch promptDelete(deleted.File.Path) {
+				switch promptDelete(deleted.Path) {
 				case PROMPT_ANSWER_YES:
 
 				case PROMPT_ANSWER_ALL:
@@ -315,11 +304,9 @@ func main_i() int {
 
 			// Remove the file.
 			if goAhead {
-				// Remove the item and update hash map.
-				if existing.File.Path != deleted.File.Path {
-					mapping[file.SHA256] = HashItem{
-						File: file, Scanner: scanner,
-					}
+				// Update hash map.
+				if existing == deleted {
+					mapping[file.SHA256] = remain
 				}
 
 				if list {
@@ -329,22 +316,22 @@ func main_i() int {
 					// from the map because we want to save their
 					// SHA256 hashes in local cache.
 					updater.Log(LOG_INFO, "%v is duplicated (%v).",
-						deleted.File.Path, remain.File.Path)
+						deleted.Path, remain.Path)
 
-					deletedBytes += deleted.File.Size
+					deletedBytes += deleted.Size
 					deletedFiles++
 				} else {
 					// Delete duplicated file from the map.
-					deleted.Scanner.Remove(deleted.File.Path)
+					scanner.Remove(deleted.Path)
 
 					// Delete duplicated file from disk.
-					if err := os.Remove(deleted.File.Path); err != nil {
+					if err := os.Remove(deleted.Path); err != nil {
 						updater.Log(LOG_ERROR, "Could not delete file %v (%v).",
-							deleted.File.Path, err)
+							deleted.Path, err)
 						updater.IncreaseErrors()
 					} else {
-						updater.Log(LOG_INFO, "%v was deleted.", deleted.File.Path)
-						deletedBytes += deleted.File.Size
+						updater.Log(LOG_INFO, "%v was deleted.", deleted.Path)
+						deletedBytes += deleted.Size
 						deletedFiles++
 					}
 				}
