@@ -355,7 +355,7 @@ func main_i() int {
 	}
 
 	if updater.Errors() > 0 {
-		updater.Log(LOG_INFO, "Errors:        %v", updater.Errors())
+		updater.Log(LOG_INFO, "Errors:           %v", updater.Errors())
 	}
 
 	return 0
