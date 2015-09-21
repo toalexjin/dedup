@@ -112,25 +112,14 @@ func viewFile(file string) error {
 	return cmd.Start()
 }
 
-var extentions = []string{
-	".bat",
-	".com",
-	".dll",
-	".drv",
-	".exe",
-	".sys",
-}
-
 // Return value is PROMPT_ANSWER_???
 func promptDelete(file string) int {
 
 	// Support "view" or not.
 	viewFlag := false
 
-	if os.PathSeparator != '/' {
-		if SupportView(filepath.Ext(file)) {
-			viewFlag = true
-		}
+	if os.PathSeparator != '/' && SupportView(filepath.Ext(file)) {
+		viewFlag = true
 	}
 
 	// Create a buffered reader.
@@ -297,38 +286,39 @@ func main_i() int {
 				}
 			}
 
-			// Remove the file.
-			if goAhead {
-				// Update hash map.
-				if existing == deleted {
-					mapping[file.SHA256] = remain
-				}
+			if !goAhead {
+				continue
+			}
 
-				if list {
-					// Show duplicated files, do not delete them.
-					//
-					// Be aware that we do not remove dupliated files
-					// from the map because we want to save their
-					// SHA256 hashes in local cache.
-					updater.Log(LOG_INFO, "%v is duplicated (%v).",
-						deleted.Path, remain.Path)
+			// Update hash map.
+			if existing == deleted {
+				mapping[file.SHA256] = remain
+			}
 
+			if list {
+				// Show duplicated files, do not delete them.
+				//
+				// Be aware that we do not remove dupliated files
+				// from the map because we want to save their
+				// SHA256 hashes in local cache.
+				updater.Log(LOG_INFO, "%v is duplicated (%v).",
+					deleted.Path, remain.Path)
+
+				deletedBytes += deleted.Size
+				deletedFiles++
+			} else {
+				// Delete duplicated file from the map.
+				scanner.Remove(deleted.Path)
+
+				// Delete duplicated file from disk.
+				if err := os.Remove(deleted.Path); err != nil {
+					updater.Log(LOG_ERROR, "Could not delete file %v (%v).",
+						deleted.Path, err)
+					updater.IncreaseErrors()
+				} else {
+					updater.Log(LOG_INFO, "%v was deleted.", deleted.Path)
 					deletedBytes += deleted.Size
 					deletedFiles++
-				} else {
-					// Delete duplicated file from the map.
-					scanner.Remove(deleted.Path)
-
-					// Delete duplicated file from disk.
-					if err := os.Remove(deleted.Path); err != nil {
-						updater.Log(LOG_ERROR, "Could not delete file %v (%v).",
-							deleted.Path, err)
-						updater.IncreaseErrors()
-					} else {
-						updater.Log(LOG_INFO, "%v was deleted.", deleted.Path)
-						deletedBytes += deleted.Size
-						deletedFiles++
-					}
 				}
 			}
 		}
