@@ -54,6 +54,13 @@ func usage() {
 	fmt.Println("    Remark: If \"-p <POLICY>\" is not set, then default policy")
 	fmt.Println("            \"longname,longpath,new\" will be used.")
 	fmt.Println()
+	fmt.Println("Examples:")
+	fmt.Println("    > dedup -l d:\\data e:\\data")
+	fmt.Println("      List duplicated files.")
+	fmt.Println()
+	fmt.Println("    > dedup -i photo,video d:\\data e:\\data")
+	fmt.Println("      Remove duplicated photo & video")
+	fmt.Println()
 }
 
 // Input paths might be relative and duplicated,

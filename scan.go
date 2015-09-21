@@ -26,7 +26,7 @@ func (me *SHA256Digest) String() string {
 type FileAttr struct {
 	Path    string       // Full path.
 	Name    string       // Name.
-	ModTime int64        // the number of nanoseconds elapsed since January 1, 1970 UTC
+	ModTime int64        // The number of nanoseconds elapsed since January 1, 1970 UTC
 	Size    int64        // File size, in bytes.
 	SHA256  SHA256Digest // SHA256 checksum.
 
@@ -450,17 +450,14 @@ func (me *fileScannerImpl) ReadCache() error {
 
 	for {
 		object := new(FileAttr)
-		err := object.ReadCache(reader)
 
-		if err == io.EOF {
+		if err := object.ReadCache(reader); err == nil {
+			me.files[GetPathAsKey(object.Path)] = object
+		} else if err == io.EOF {
 			break
-		}
-
-		if err != nil {
+		} else {
 			return err
 		}
-
-		me.files[GetPathAsKey(object.Path)] = object
 	}
 
 	return nil

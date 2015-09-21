@@ -83,7 +83,7 @@ func (me *policyImpl) DeleteWhich(first, second *FileAttr) int {
 
 	// If a folder is symbolic link, then different
 	// file paths might point to the same file.
-	// To avoid delete file by mistake,
+	// To avoid deleting file by mistake,
 	// we have to call os.SameFile().
 	if os.SameFile(first.Details, second.Details) {
 		return DELETE_WHICH_NEITHER
