@@ -50,6 +50,14 @@ dedup [-v] [-f] [-l] [-i <TYPE,...>] [-e <TYPE,...>] [-p <POLICY,...>] <path>...
 5. `dedup -e office,tarball d:\data e:\data`: Do not remove duplicated
    Microsoft Office documents and tarball files.
 
+## Best Practice
+
+1. You could run `dedup -l <path>` to check duplicated files before really removing them.
+2. It's better to **always** use **Include Filters** to remove specified types of
+   duplicated files, because it could avoid removing other types of duplicated files
+   (e.g. system files, application files) that you want to keep.
+   For instance, run `dedup -i photo <path>` to remove duplicated **pictures** only.
+
 ## Design
 
 The program scans all files of specified folders, calculates SHA256 hash

@@ -289,7 +289,7 @@ func (me *fileScannerImpl) scanFolder(path string) error {
 		head++
 
 		if len(folder) > len(path) {
-			me.updater.Log(LOG_TRACE, "Scanning %v...", folder)
+			me.updater.Log(LOG_INFO, "Scanning %v...", folder)
 		}
 
 		// Open this folder.
