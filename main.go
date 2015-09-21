@@ -59,7 +59,7 @@ func usage() {
 	fmt.Println("      List duplicated files.")
 	fmt.Println()
 	fmt.Println("    > dedup -i photo,video d:\\data e:\\data")
-	fmt.Println("      Remove duplicated photo & video")
+	fmt.Println("      Remove duplicated photo & video.")
 	fmt.Println()
 }
 

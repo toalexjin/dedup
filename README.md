@@ -53,10 +53,10 @@ dedup [-v] [-f] [-l] [-i <TYPE,...>] [-e <TYPE,...>] [-p <POLICY,...>] <path>...
 ## Best Practice
 
 1. You could run `dedup -l <path>` to check duplicated files before really removing them.
-2. It's better to **always** use **Include Filters** to remove specified types of
-   duplicated files, because it could avoid removing other types of duplicated files
-   (e.g. system files, application files) that you want to keep.
-   For instance, run `dedup -i photo,video <path>` to remove duplicated **Photo and Video** only.
+2. It's better to always use **Include Filters** to remove specified types of
+   duplicated files, because it could avoid removing other duplicated files
+   (e.g. system files, application files) that you want to keep. For instance,
+   run `dedup -i photo,video <path>` to remove duplicated **Photo and Video** only.
 
 ## Design
 
