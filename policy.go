@@ -2,7 +2,6 @@
 package main
 
 import (
-	"os"
 	"strings"
 )
 
@@ -15,9 +14,6 @@ const (
 
 	// Either could be removed.
 	DELETE_WHICH_EITHER
-
-	// Neither could be removed.
-	DELETE_WHICH_NEITHER
 )
 
 const (
@@ -53,10 +49,7 @@ var defaultPolicyItems = []*policyItem{
 
 // Policy interface.
 type Policy interface {
-	// Check which file should be removed.
-	//
-	// Return value is DELETE_WHICH_???
-	DeleteWhich(first, second *FileAttr) int
+	Sort(files []*FileAttr)
 }
 
 // Policy item.
@@ -70,25 +63,23 @@ type policyImpl struct {
 	items []*policyItem
 }
 
-func (me *policyImpl) DeleteWhich(first, second *FileAttr) int {
-	// We check file size here to avoid hash collision.
-	if first.Size != second.Size {
-		return DELETE_WHICH_NEITHER
+func (me *policyImpl) Sort(files []*FileAttr) {
+	index := 0
+
+	for i := 1; i < len(files); i++ {
+		if me.deleteWhich(files[index], files[i]) == DELETE_WHICH_FIRST {
+			index = i
+		}
 	}
 
-	// Check if the two paths are identical.
-	if SamePath(first.Path, second.Path) {
-		return DELETE_WHICH_NEITHER
+	if index != 0 {
+		tmp := files[0]
+		files[0] = files[index]
+		files[index] = tmp
 	}
+}
 
-	// If a folder is symbolic link, then different
-	// file paths might point to the same file.
-	// To avoid deleting file by mistake,
-	// we have to call os.SameFile().
-	if os.SameFile(first.Details, second.Details) {
-		return DELETE_WHICH_NEITHER
-	}
-
+func (me *policyImpl) deleteWhich(first, second *FileAttr) int {
 	for _, item := range me.items {
 		switch item.category {
 		case POLICY_CATEGORY_MOD_TIME:

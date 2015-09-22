@@ -151,16 +151,13 @@ type FileScanner interface {
 	// This function should be called after scanning files.
 	GetTotalBytes() int64
 
-	// Get all files.
-	//
-	// The key is file full path,
-	// which would be lower case on Windows.
-	GetFiles() map[string]*FileAttr
+	// Get scanned files.
+	GetScannedFiles() map[SHA256Digest][]*FileAttr
 
-	// Remove a file from the map.
+	// File removed event.
 	//
-	// This function will not remove file from disk.
-	Remove(path string)
+	// This event is used to update cache file.
+	OnFileRemoved(removed *FileAttr)
 
 	// Scan files
 	Scan() error
@@ -174,22 +171,27 @@ type FileScanner interface {
 
 // File scanner implementation.
 type fileScannerImpl struct {
-	// All files.
+	// All files saved in cache file.
 	//
-	// The key is file full path,
-	// which would be lower case on Windows.
-	files map[string]*FileAttr
+	// Note that the map contains files scanned
+	// by previous scanning, and the map is a super set.
+	//
+	// The key is file full path, would be lower case on Windows.
+	cacheFiles map[string]*FileAttr
+
+	// All files scanned this time.
+	scannedFiles map[SHA256Digest][]*FileAttr
 
 	paths        []string  // Source paths to scan
 	filter       Filter    // Filter.
 	updater      Updater   // Updater interface
 	cache        string    // Cache file path.
-	totalFiles   int       // Total files.
+	totalFiles   int       // Total files (map scannedFiles).
 	totalFolders int       // Total folders.
-	totalBytes   int64     // Total size, in bytes.
+	totalBytes   int64     // Total size (map scannedFiles), in bytes.
 	hashEngine   hash.Hash // SHA256 hash engine.
 	buffer       []byte    // Buffer for reading file content.
-	dirty        bool      // Indicates if cache file needs to update.
+	cacheDirty   bool      // Indicates if cache file needs to update.
 }
 
 // Create a new file scanner.
@@ -197,13 +199,14 @@ func NewFileScanner(paths []string,
 	filter Filter, updater Updater) FileScanner {
 
 	return &fileScannerImpl{
-		files:      make(map[string]*FileAttr),
-		paths:      paths,
-		filter:     filter,
-		updater:    updater,
-		cache:      (filter.GetCacheDir() + string(os.PathSeparator) + "global.cache"),
-		hashEngine: sha256.New(),
-		buffer:     make([]byte, 512*1024),
+		cacheFiles:   make(map[string]*FileAttr),
+		scannedFiles: make(map[SHA256Digest][]*FileAttr),
+		paths:        paths,
+		filter:       filter,
+		updater:      updater,
+		cache:        (filter.GetCacheDir() + string(os.PathSeparator) + "global.cache"),
+		hashEngine:   sha256.New(),
+		buffer:       make([]byte, 512*1024),
 	}
 }
 
@@ -219,16 +222,13 @@ func (me *fileScannerImpl) GetTotalBytes() int64 {
 	return me.totalBytes
 }
 
-func (me *fileScannerImpl) GetFiles() map[string]*FileAttr {
-	return me.files
+func (me *fileScannerImpl) GetScannedFiles() map[SHA256Digest][]*FileAttr {
+	return me.scannedFiles
 }
 
-func (me *fileScannerImpl) Remove(path string) {
-	delete(me.files, GetPathAsKey(path))
-
-	// A file was removed from the map,
-	// set dirty flag to true.
-	me.dirty = true
+func (me *fileScannerImpl) OnFileRemoved(removed *FileAttr) {
+	delete(me.cacheFiles, GetPathAsKey(removed.Path))
+	me.cacheDirty = true
 }
 
 func (me *fileScannerImpl) Scan() error {
@@ -346,6 +346,32 @@ func (me *fileScannerImpl) scanFolder(path string) error {
 	return nil
 }
 
+func (me *fileScannerImpl) onFileFound(newFile *FileAttr) {
+	// Update map[SHA256]...
+	if list, ok := me.scannedFiles[newFile.SHA256]; ok {
+		for _, existing := range list {
+			// 1. Check file size here to avoid hash collision.
+			// 2. If the two paths are the same, then skip.
+			// 3. If the two paths point to the same file, then skip.
+			if existing.Size != newFile.Size ||
+				SamePath(existing.Path, newFile.Path) ||
+				os.SameFile(existing.Details, newFile.Details) {
+				return
+			}
+		}
+
+		me.scannedFiles[newFile.SHA256] = append(list, newFile)
+	} else {
+		me.scannedFiles[newFile.SHA256] = []*FileAttr{newFile}
+	}
+
+	me.updater.Log(LOG_TRACE, "%v (%v)", newFile.Path, &newFile.SHA256)
+
+	// Update total count.
+	me.totalFiles++
+	me.totalBytes += newFile.Size
+}
+
 // Calculate file checksum and put it to the map.
 func (me *fileScannerImpl) scanFile(
 	path string, info os.FileInfo) error {
@@ -356,17 +382,14 @@ func (me *fileScannerImpl) scanFile(
 	// If the file already exists in the map,
 	// and file size & last modification time are the same,
 	// then skip to read file content to enhance performance.
-	if value, found := me.files[key]; found {
+	if value, found := me.cacheFiles[key]; found {
 		if value.Size == info.Size() && value.ModTime == info.ModTime().UnixNano() {
-			// Write trace log message.
-			me.updater.Log(LOG_TRACE, "%v (%v)", path, &value.SHA256)
-
-			// Update file count and total size.
-			me.totalFiles++
-			me.totalBytes += info.Size()
-
 			// Set FileAttr.Details to valid value.
 			value.Details = info
+
+			// Update total count and map[SHA256]...
+			me.onFileFound(value)
+
 			return nil
 		}
 	}
@@ -414,18 +437,13 @@ func (me *fileScannerImpl) scanFile(
 	copy(newValue.SHA256[:], me.hashEngine.Sum(nil))
 
 	// Add the new object to map.
-	me.files[key] = newValue
+	me.cacheFiles[key] = newValue
 
-	// Update file count and total size.
-	me.totalFiles++
-	me.totalBytes += info.Size()
+	// A new file was added, set dirty flag to true.
+	me.cacheDirty = true
 
-	// A new file was added to the map,
-	// set dirty flag to true.
-	me.dirty = true
-
-	// Write a trace log message.
-	me.updater.Log(LOG_TRACE, "%v (%v)", path, &newValue.SHA256)
+	// Update total count and map[SHA256]...
+	me.onFileFound(newValue)
 
 	return nil
 }
@@ -452,7 +470,7 @@ func (me *fileScannerImpl) ReadCache() error {
 		object := new(FileAttr)
 
 		if err := object.ReadCache(reader); err == nil {
-			me.files[GetPathAsKey(object.Path)] = object
+			me.cacheFiles[GetPathAsKey(object.Path)] = object
 		} else if err == io.EOF {
 			break
 		} else {
@@ -464,11 +482,11 @@ func (me *fileScannerImpl) ReadCache() error {
 }
 
 func (me *fileScannerImpl) SaveCache() error {
-	if !me.dirty {
+	if !me.cacheDirty {
 		return nil
 	}
 
-	me.dirty = false
+	me.cacheDirty = false
 
 	// Create cache folder if it does not exist.
 	if _, err := os.Stat(me.filter.GetCacheDir()); err != nil {
@@ -491,7 +509,7 @@ func (me *fileScannerImpl) SaveCache() error {
 	writer := bufio.NewWriter(fp)
 
 	// Write all files with their hashes to disk.
-	for _, object := range me.files {
+	for _, object := range me.cacheFiles {
 		if err := object.SaveCache(writer); err != nil {
 			return err
 		}

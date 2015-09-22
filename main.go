@@ -7,15 +7,23 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
+	"strconv"
 	"strings"
 )
 
-// Return value of promptDelete()
+// Return value of promptKeep()
 const (
+	// Keep the first one and remove the rest.
 	PROMPT_ANSWER_YES = iota
-	PROMPT_ANSWER_NO
-	PROMPT_ANSWER_ALL
+
+	// Do not remove duplicated files this time,
+	// will prompt again when duplication happens next time.
+	PROMPT_ANSWER_SKIP
+
+	// Do not prompt again and remove all duplicated files.
+	PROMPT_ANSWER_CONTINUE
+
+	// Abort program.
 	PROMPT_ANSWER_QUIT
 )
 
@@ -107,54 +115,69 @@ func getAbsUniquePaths(paths []string) ([]string, error) {
 	return uniquePaths, nil
 }
 
+func showDuplicatedFiles(files []*FileAttr) {
+	fmt.Printf("* 1) %v\n", files[0].Path)
+
+	for i := 1; i < len(files); i++ {
+		fmt.Printf("  %v) %v\n", i+1, files[i].Path)
+	}
+}
+
 func viewFile(file string) error {
 	cmd := exec.Command("explorer.exe", file)
 	return cmd.Start()
 }
 
 // Return value is PROMPT_ANSWER_???
-func promptDelete(file string) int {
+//
+// Note that this function might modify input slice "files".
+// If return value is PROMPT_ANSWER_YES or PROMPT_ANSWER_CONTINUE,
+// the first file in slice "files" need to keep and the rest
+// of files need to remove.
+func promptKeep(files []*FileAttr) int {
 
-	// Support "view" or not.
-	viewFlag := false
-
-	if os.PathSeparator != '/' && SupportView(filepath.Ext(file)) {
-		viewFlag = true
+	numberStr := "1"
+	for i := 1; i < len(files); i++ {
+		numberStr += fmt.Sprintf(",%v", i+1)
 	}
 
 	// Create a buffered reader.
 	reader := bufio.NewReader(os.Stdin)
 
 	for {
-		if viewFlag {
-			fmt.Printf("Delete %v? (Yes,All,No,View,Quit):", file)
-		} else {
-			fmt.Printf("Delete %v? (Yes,All,No,Quit):", file)
-		}
+		// Print duplicated files.
+		showDuplicatedFiles(files)
 
+		fmt.Printf("Which file do you want to keep? (1-%v,Skip,Continue,Quit):", len(files))
 		if line, _, err := reader.ReadLine(); err == nil {
+			cmd := strings.ToLower(string(line))
 
-			switch strings.ToLower(string(line)) {
-			case "y", "yes":
-				return PROMPT_ANSWER_YES
+			switch cmd {
+			case "s", "skip":
+				return PROMPT_ANSWER_SKIP
 
-			case "n", "no":
-				return PROMPT_ANSWER_NO
-
-			case "a", "all":
-				return PROMPT_ANSWER_ALL
-
-			case "v", "view":
-				if viewFlag {
-					viewFile(file)
-				}
+			case "c", "continue":
+				return PROMPT_ANSWER_CONTINUE
 
 			case "q", "quit":
 				return PROMPT_ANSWER_QUIT
 
 			default:
 				if len(line) > 0 {
-					fmt.Fprintf(os.Stderr, "Invalid Command: %v\n\n", string(line))
+					index, err := strconv.Atoi(cmd)
+					if err != nil || index < 1 || index > len(files) {
+						fmt.Fprintf(os.Stderr, "Invalid Command: %v\n\n", string(line))
+					} else {
+						if index != 1 {
+							tmp := files[0]
+							files[0] = files[index-1]
+							files[index-1] = tmp
+						}
+
+						return PROMPT_ANSWER_YES
+					}
+				} else {
+					fmt.Println()
 				}
 			}
 		}
@@ -223,103 +246,61 @@ func main_i() int {
 	// Result variables
 	var deletedFiles int = 0
 	var deletedBytes int64 = 0
+	var first_prompt = true
 
-	// Map SHA256 hash to file attribute pointer.
-	mapping := make(map[SHA256Digest]*FileAttr)
-
-	// Iterate files one by one.
-	for _, file := range scanner.GetFiles() {
-		// We load all files from local cache before scanning files.
-		// At that time all files' "Details" field is nil.
-		// While scanning files, if any of them is not skipped by filter,
-		// then "Details" field would be set to valid value.
-		// Therefore, if "Details" field is nil, then it's not
-		// scanned by this time, we should skip it.
-		if file.Details == nil {
+	// Iterate all scanned files.
+	for _, item := range scanner.GetScannedFiles() {
+		// If no duplicated files, then skip.
+		if len(item) <= 1 {
 			continue
 		}
 
-		// Find if the hash already exists in the map.
-		if existing, found := mapping[file.SHA256]; !found {
-			// It is a new hash.
-			mapping[file.SHA256] = file
-		} else {
-			// The hash already exists.
-			var deleted *FileAttr = nil
-			var remain *FileAttr = nil
-			var goAhead bool = true
+		// Once returned, item[0] needs to keep
+		// and the rest could be removed.
+		policy.Sort(item)
 
-			// Check which file to remove
-			switch policy.DeleteWhich(existing, file) {
-			case DELETE_WHICH_FIRST:
-				deleted = existing
-				remain = file
+		if list {
+			showDuplicatedFiles(item)
 
-			case DELETE_WHICH_EITHER:
-				fallthrough
-
-			case DELETE_WHICH_SECOND:
-				deleted = file
-				remain = existing
-
-			case DELETE_WHICH_NEITHER:
-				goAhead = false
+			deletedFiles += len(item) - 1
+			for i := 1; i < len(item); i++ {
+				deletedBytes += item[i].Size
 			}
+		} else {
+			if !force {
+				if first_prompt {
+					first_prompt = false
+				} else {
+					fmt.Println()
+				}
 
-			// Prompt before remove file.
-			if !list && goAhead && !force {
-				switch promptDelete(deleted.Path) {
-				case PROMPT_ANSWER_YES:
-
-				case PROMPT_ANSWER_ALL:
-					force = true
-
-				case PROMPT_ANSWER_NO:
-					goAhead = false
-
-				case PROMPT_ANSWER_QUIT:
-					goAhead = false
-
-					// Update local cache.
+				// Prompt before remove file.
+				if result := promptKeep(item); result == PROMPT_ANSWER_SKIP {
+					continue
+				} else if result == PROMPT_ANSWER_QUIT {
 					scanner.SaveCache()
 					return 1
+				} else if result == PROMPT_ANSWER_CONTINUE {
+					force = true
 				}
 			}
 
-			if !goAhead {
-				continue
-			}
-
-			// Update hash map.
-			if existing == deleted {
-				mapping[file.SHA256] = remain
-			}
-
-			if list {
-				// Show duplicated files, do not delete them.
-				//
-				// Be aware that we do not remove dupliated files
-				// from the map because we want to save their
-				// SHA256 hashes in local cache.
-				updater.Log(LOG_INFO, "%v is duplicated (%v).",
-					deleted.Path, remain.Path)
-
-				deletedBytes += deleted.Size
-				deletedFiles++
-			} else {
-				// Delete duplicated file from the map.
-				scanner.Remove(deleted.Path)
-
-				// Delete duplicated file from disk.
-				if err := os.Remove(deleted.Path); err != nil {
+			// Delete duplicated files, range [1,len).
+			for i := 1; i < len(item); i++ {
+				if err := os.Remove(item[i].Path); err != nil {
 					updater.Log(LOG_ERROR, "Could not delete file %v (%v).",
-						deleted.Path, err)
+						item[i].Path, err)
 					updater.IncreaseErrors()
-				} else {
-					updater.Log(LOG_INFO, "%v was deleted.", deleted.Path)
-					deletedBytes += deleted.Size
-					deletedFiles++
+					continue
 				}
+
+				// Write log and update file count.
+				updater.Log(LOG_INFO, "%v was deleted.", item[i].Path)
+				deletedBytes += item[i].Size
+				deletedFiles++
+
+				// Update cache file.
+				scanner.OnFileRemoved(item[i])
 			}
 		}
 	}

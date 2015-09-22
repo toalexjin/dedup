@@ -52,22 +52,6 @@ var extentionMapping = map[string][]string{
 		".zip", ".zipx", ".zz"},
 }
 
-func SupportView(ext string) bool {
-	for key, list := range extentionMapping {
-		if key != "audio" && key != "office" && key != "photo" && key != "video" {
-			continue
-		}
-
-		for _, value := range list {
-			if strings.EqualFold(value, ext) {
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
 func parseTypes(types string, exts map[string]bool) error {
 	for _, value := range strings.Split(strings.ToLower(types), ",") {
 		list, ok := extentionMapping[value]
