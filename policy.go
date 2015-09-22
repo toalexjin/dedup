@@ -49,6 +49,8 @@ var defaultPolicyItems = []*policyItem{
 
 // Policy interface.
 type Policy interface {
+	// Once returned, files[0] needs to keep
+	// and the rest of files could be removed.
 	Sort(files []*FileAttr)
 }
 

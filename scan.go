@@ -403,6 +403,8 @@ func (me *fileScannerImpl) scanFile(
 	}
 	defer fp.Close()
 
+	me.updater.Log(LOG_TRACE, "Calculating checksum for %v...", path)
+
 	// Reset hash engine
 	me.hashEngine.Reset()
 

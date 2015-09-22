@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -123,23 +122,13 @@ func showDuplicatedFiles(files []*FileAttr) {
 	}
 }
 
-func viewFile(file string) error {
-	cmd := exec.Command("explorer.exe", file)
-	return cmd.Start()
-}
-
 // Return value is PROMPT_ANSWER_???
 //
 // Note that this function might modify input slice "files".
 // If return value is PROMPT_ANSWER_YES or PROMPT_ANSWER_CONTINUE,
-// the first file in slice "files" need to keep and the rest
-// of files need to remove.
+// the first file of slice "files" needs to keep and the rest
+// of files could be removed.
 func promptKeep(files []*FileAttr) int {
-
-	numberStr := "1"
-	for i := 1; i < len(files); i++ {
-		numberStr += fmt.Sprintf(",%v", i+1)
-	}
 
 	// Create a buffered reader.
 	reader := bufio.NewReader(os.Stdin)
