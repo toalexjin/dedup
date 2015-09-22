@@ -188,7 +188,7 @@ func main_i() int {
 	flag.BoolVar(&list, "l", false, "List duplicated files only, do not remove them.")
 	flag.StringVar(&includes, "i", "", "Include filters.")
 	flag.StringVar(&excludes, "e", "", "Exclude filters.")
-	flag.StringVar(&policySpec, "p", "", "Policy indicates which files to remove.")
+	flag.StringVar(&policySpec, "p", "", "When duplication happens, which file will be removed.")
 	flag.Parse()
 
 	// If argument is missing, then exit.
