@@ -77,9 +77,9 @@ e.g. Windows, Linux, Mac,...
 ## Build
 
 1. Install latest **Go Compiler** (https://golang.org)
-2. `export $GOROOT=/path/to/go/compiler`
-3. `export $PATH=$PATH:$GOROOT/bin`
+2. `export GOROOT=/path/to/go/compiler`
+3. `export PATH=$PATH:$GOROOT/bin`
 4. `mkdir ~/go-workspace`
-5. `export $GOPATH=~/go-workspace`
+5. `export GOPATH=~/go-workspace`
 6. `go get github.com/toalexjin/dedup`
 7. `$GOPATH/bin/dedup`
