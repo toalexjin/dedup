@@ -38,9 +38,6 @@ type FileAttr struct {
 	// After loading saved file list from local disk cache,
 	// this field is null. While scanning files,
 	// this field will be set to valid value.
-	// If thie field is still null after scanning files,
-	// then it means that the file no longer exists in disk
-	// and should be removed from map.
 	Details os.FileInfo
 }
 
@@ -244,6 +241,7 @@ func (me *fileScannerImpl) Scan() error {
 		// Get path attribute.
 		info, err := os.Stat(path)
 		if err != nil {
+			me.updater.IncreaseErrors()
 			me.updater.Log(LOG_ERROR, "%v (%v)", err, path)
 			me.updater.Log(LOG_INFO, "")
 			continue

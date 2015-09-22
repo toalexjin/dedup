@@ -280,9 +280,9 @@ func main_i() int {
 			// Delete duplicated files, range [1,len).
 			for i := 1; i < len(item); i++ {
 				if err := os.Remove(item[i].Path); err != nil {
+					updater.IncreaseErrors()
 					updater.Log(LOG_ERROR, "Could not delete file %v (%v).",
 						item[i].Path, err)
-					updater.IncreaseErrors()
 					continue
 				}
 
