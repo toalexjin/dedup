@@ -246,13 +246,22 @@ func main_i() int {
 	// Result variables
 	var deletedFiles int = 0
 	var deletedBytes int64 = 0
-	var first_prompt = true
+	var first_duplication = true
 
 	// Iterate all scanned files.
 	for _, item := range scanner.GetScannedFiles() {
 		// If no duplicated files, then skip.
 		if len(item) <= 1 {
 			continue
+		}
+
+		if first_duplication {
+			first_duplication = false
+			updater.Log(LOG_INFO, "<Duplicated Files>")
+		} else {
+			if !list && !force {
+				updater.Log(LOG_INFO, "")
+			}
 		}
 
 		// Once returned, item[0] needs to keep
@@ -268,12 +277,6 @@ func main_i() int {
 			}
 		} else {
 			if !force {
-				if first_prompt {
-					first_prompt = false
-				} else {
-					fmt.Println()
-				}
-
 				// Prompt before remove file.
 				if result := promptKeep(item); result == PROMPT_ANSWER_SKIP {
 					continue
