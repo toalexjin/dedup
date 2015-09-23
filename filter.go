@@ -47,8 +47,8 @@ var extentionMapping = map[string][]string{
 
 	"tarball": {".7z", ".ace", ".ar", ".arc", ".ari",
 		".arj", ".bz", ".bz2", ".bzip2", ".cab",
-		".gho", ".gz", ".gzi", ".gzip", ".iso",
-		".rar", ".tar", ".tar.gz", ".tgz", ".z",
+		".gho", ".gz", ".gzi", ".gzip", ".iso", ".lzma",
+		".rar", ".tar", ".tar.gz", ".tgz", ".xz", ".z",
 		".zip", ".zipx", ".zz"},
 }
 
