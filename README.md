@@ -22,7 +22,7 @@ dedup [-v] [-f] [-l] [-i <TYPE,...>] [-e <TYPE,...>] [-p <POLICY,...>] <path>...
     - **office**: Microsoft Office documents.
     - **photo**: Photo (picture) files.
     - **video**: Video files.
-    - **tarball**: Compressed and ISO files (e.g. gz, iso, rar, zip).
+    - **package**: Tarball, compressed, ISO, installation packages, etc.
 - `<POLICY,...>`
     - **longname**: Remove duplicated files with longer file name.
     - **shortname**: Remove duplicated files with shorter file name.
@@ -47,8 +47,8 @@ dedup [-v] [-f] [-l] [-i <TYPE,...>] [-e <TYPE,...>] [-p <POLICY,...>] <path>...
 3. `dedup -l d:\data e:\data`: List duplicated files only, do **NOT** remove them.
 4. `dedup -i photo,video d:\data e:\data`: Remove duplicated **photo** and **video**
    files only, and do **NOT** remove any other duplicated files.
-5. `dedup -e office,tarball d:\data e:\data`: Do not remove duplicated
-   Microsoft Office documents and tarball files.
+5. `dedup -e office,package d:\data e:\data`: Do not remove duplicated
+   Microsoft Office documents and package files.
 
 ## Best Practice
 

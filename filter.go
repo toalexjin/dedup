@@ -34,9 +34,9 @@ var extentionMapping = map[string][]string{
 		".tta", ".wav", ".wma", ".wv", ".mid"},
 
 	"office": {".doc", ".dot", ".docx", ".docm", ".dotx", ".dotm", ".docb",
-		".xls", ".xlt", ".xlm", ".xlsx", ".xlsm", ".xltx", ".xltm",
-		".ppt", ".pot", ".pps", ".pptx", ".pptm", ".potx", ".potm",
-		".ppam", ".ppsx", ".ppsm", ".sldx", ".sldm",
+		".xls", ".xlt", ".xlm", ".xlsx", ".xlsm", ".xltx", ".xltm", ".mpp",
+		".one", ".ppt", ".pot", ".pps", ".pptx", ".pptm", ".potx", ".potm",
+		".ppam", ".ppsx", ".ppsm", ".sldx", ".sldm", ".vsd", ".vsdx", ".vst",
 		".mdb", ".accdb", ".accde", ".accdt", ".accdr"},
 
 	"photo": {".bmp", ".emf", ".gif", ".ico", ".jpeg",
@@ -45,10 +45,10 @@ var extentionMapping = map[string][]string{
 	"video": {".asf", ".avi", ".mov", ".mp4", ".mpg",
 		".rm", ".rmvb", ".vob", ".wmv"},
 
-	"tarball": {".7z", ".ace", ".ar", ".arc", ".ari",
-		".arj", ".bz", ".bz2", ".bzip2", ".cab",
-		".gho", ".gz", ".gzi", ".gzip", ".iso", ".lzma",
-		".rar", ".tar", ".tar.gz", ".tgz", ".xz", ".z",
+	"package": {".7z", ".ace", ".ar", ".arc", ".ari",
+		".arj", ".bz", ".bz2", ".bzip2", ".cab", ".deb",
+		".gho", ".gz", ".gzi", ".gzip", ".iso", ".lzma", ".msi",
+		".pkg", ".rar", ".rpm", ".tar", ".tar.gz", ".tgz", ".xz", ".z",
 		".zip", ".zipx", ".zz"},
 }
 

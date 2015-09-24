@@ -45,7 +45,7 @@ func usage() {
 	fmt.Println("    office:    Microsoft Office documents.")
 	fmt.Println("    photo:     Photo (picture) files.")
 	fmt.Println("    video:     Video files.")
-	fmt.Println("    tarball:   Compressed and ISO files (e.g. gz, iso, rar, zip).")
+	fmt.Println("    package:   Tarball, compressed, ISO, installation packages, etc.")
 	fmt.Println()
 	fmt.Println("    Remark: If both include and exclude filters are not set,")
 	fmt.Println("            then all files will be scanned.")
